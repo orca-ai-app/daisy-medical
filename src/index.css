@@ -1,0 +1,16 @@
+@import 'tailwindcss';
+
+@layer base {
+  html {
+    font-family: 'Poppins', system-ui, sans-serif;
+    background-color: #f5f9fb;
+    color: #1a4359;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: 'Quicksand', sans-serif;
+    font-weight: 700;
+  }
+}
