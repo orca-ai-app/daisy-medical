@@ -1,20 +1,24 @@
-import { EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from './config';
-import type { SubmitPayload } from './types';
+import { EDGE_FUNCTION_URL, SUPABASE_ANON_KEY, SUPABASE_URL } from './config';
+import type { CourseCard, SubmitPayload } from './types';
 
-export type SubmitResult =
-  | { ok: true }
+export type SubmitResult = { ok: true } | { ok: false; message: string };
+
+export type CourseLookupResult =
+  | { ok: true; courses: CourseCard[] }
   | { ok: false; message: string };
+
+const API_HEADERS = {
+  'Content-Type': 'application/json',
+  apikey: SUPABASE_ANON_KEY,
+  Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+} as const;
 
 export async function submitDeclaration(payload: SubmitPayload): Promise<SubmitResult> {
   let response: Response;
   try {
     response = await fetch(EDGE_FUNCTION_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      },
+      headers: API_HEADERS,
       body: JSON.stringify(payload),
     });
   } catch {
@@ -25,7 +29,6 @@ export async function submitDeclaration(payload: SubmitPayload): Promise<SubmitR
     return { ok: true };
   }
 
-  // Try to parse a JSON error message from the Edge Function
   let errorMessage = `Unexpected error (${response.status}).`;
   try {
     const body = (await response.json()) as { error?: string; message?: string };
@@ -40,4 +43,34 @@ export async function submitDeclaration(payload: SubmitPayload): Promise<SubmitR
   }
 
   return { ok: false, message: errorMessage };
+}
+
+/**
+ * Resolve courses by booking token (exact match) or instructor number (today's classes).
+ */
+export async function lookupCourses(
+  by: { booking_token: string } | { instructor_number: string },
+): Promise<CourseLookupResult> {
+  const url = `${SUPABASE_URL}/functions/v1/get-public-courses`;
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: API_HEADERS,
+      body: JSON.stringify(by),
+    });
+  } catch {
+    return { ok: false, message: 'Network error — could not look up your class.' };
+  }
+
+  if (!response.ok) {
+    return { ok: false, message: `Could not load class information (${response.status}).` };
+  }
+
+  try {
+    const body = (await response.json()) as { courses: CourseCard[] };
+    return { ok: true, courses: body.courses ?? [] };
+  } catch {
+    return { ok: false, message: 'Unexpected response from course lookup.' };
+  }
 }

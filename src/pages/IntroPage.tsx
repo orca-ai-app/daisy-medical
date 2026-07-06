@@ -1,9 +1,69 @@
+import type { CourseCard, CourseResolutionState } from '../types';
+
 interface Props {
   instructorNumber: string;
   territoryPostcode: string;
   onInstructorChange: (v: string) => void;
   onPostcodeChange: (v: string) => void;
+  courseState: CourseResolutionState;
+  onCourseSelected: (course: CourseCard) => void;
   onStart: () => void;
+}
+
+function formatEventDate(isoDate: string): string {
+  const d = new Date(isoDate);
+  if (isNaN(d.getTime())) return isoDate;
+  return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function CourseConfirmation({ course }: { course: CourseCard }) {
+  const location = course.venue_name || course.venue_postcode;
+  return (
+    <div className="mb-6 rounded-lg border border-[#D4E8F5] bg-[#EDF5FA] px-4 py-3">
+      <p className="text-sm font-medium text-[#1A4359]">
+        You&apos;re at:{' '}
+        <span className="font-semibold">{course.template_name}</span>
+        {' — '}
+        {formatEventDate(course.event_date)}
+        {location ? `, ${location}` : ''}
+      </p>
+    </div>
+  );
+}
+
+function CoursePicker({
+  courses,
+  onSelect,
+}: {
+  courses: CourseCard[];
+  onSelect: (course: CourseCard) => void;
+}) {
+  return (
+    <div className="mb-6 rounded-lg bg-white p-5 shadow-[0_2px_8px_rgba(0,60,100,0.06)]">
+      <h2 className="mb-3 font-display text-base font-bold text-[#1A4359]">
+        Which class are you at?
+      </h2>
+      <div className="space-y-2">
+        {courses.map((course) => (
+          <button
+            key={course.id}
+            type="button"
+            onClick={() => onSelect(course)}
+            className="w-full rounded-lg border border-[#D4E1E9] bg-white px-4 py-3 text-left transition-colors hover:border-[#006FAC] hover:bg-[#EDF5FA]"
+          >
+            <span className="block text-sm font-semibold text-[#1A4359]">
+              {course.template_name}
+            </span>
+            <span className="block text-xs text-[#5A7A8F]">
+              {course.start_time}
+              {course.venue_name ? ` — ${course.venue_name}` : ''}
+              {!course.venue_name && course.venue_postcode ? ` — ${course.venue_postcode}` : ''}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export function IntroPage({
@@ -11,6 +71,8 @@ export function IntroPage({
   territoryPostcode,
   onInstructorChange,
   onPostcodeChange,
+  courseState,
+  onCourseSelected,
   onStart,
 }: Props) {
   const canStart = instructorNumber.trim().length > 0;
@@ -37,6 +99,23 @@ export function IntroPage({
         <h1 className="font-display text-3xl font-bold text-[#1A4359]">Health Declaration</h1>
         <p className="mt-2 text-[#5A7A8F]">Daisy First Aid</p>
       </header>
+
+      {/* Course resolution: loading */}
+      {courseState.status === 'loading' && (
+        <div className="mb-6 rounded-lg border border-[#D4E1E9] bg-white px-4 py-3 text-sm text-[#5A7A8F]">
+          Looking up your class&hellip;
+        </div>
+      )}
+
+      {/* Course resolution: locked */}
+      {courseState.status === 'locked' && (
+        <CourseConfirmation course={courseState.course} />
+      )}
+
+      {/* Course resolution: multiple — show picker */}
+      {courseState.status === 'pick' && (
+        <CoursePicker courses={courseState.courses} onSelect={onCourseSelected} />
+      )}
 
       {/* Intro text */}
       <div className="mb-8 rounded-lg bg-white p-6 shadow-[0_2px_8px_rgba(0,60,100,0.06)]">
@@ -69,7 +148,7 @@ export function IntroPage({
             className="w-full rounded-lg border border-[#D4E1E9] bg-white px-4 py-3 text-[#1A4359] placeholder-[#5A7A8F] focus:border-[#006FAC] focus:outline-none focus:ring-2 focus:ring-[#D4E8F5]"
           />
           <p className="mt-1 text-xs text-[#5A7A8F]">
-            Your instructor's number — shown on the QR code sheet.
+            Your instructor&apos;s number — shown on the QR code sheet.
           </p>
         </div>
 

@@ -1,84 +1,43 @@
 import { useState } from 'react';
 import type React from 'react';
-import type { DeclarationData } from '../types';
+import type { CourseCard, MedicalConditionKey, SpecialRequirementsChoice } from '../types';
 import { submitDeclaration } from '../api';
-import { buildDeclarationPayload } from '../utils/buildPayload';
+import { buildSubmitPayload, canSubmitForm, toggleCondition } from '../utils/buildPayload';
+import type { FormState } from '../utils/buildPayload';
 
 interface Props {
   instructorNumber: string;
   territoryPostcode: string;
+  courseToken?: string;
+  lockedCourse?: CourseCard;
   onSuccess: () => void;
   onBack: () => void;
-}
-
-interface FormState {
-  attendeeName: string;
-  attendeeEmail: string;
-  hasMedicalConditions: boolean;
-  medicalConditionDetails: string;
-  hasAllergies: boolean;
-  allergyDetails: string;
-  hasMobilityLimitations: boolean;
-  mobilityDetails: string;
-  isPregnant: boolean;
-  emergencyContactName: string;
-  emergencyContactPhone: string;
-  additionalInfo: string;
-  consentGiven: boolean;
 }
 
 const INITIAL_FORM: FormState = {
   attendeeName: '',
   attendeeEmail: '',
-  hasMedicalConditions: false,
-  medicalConditionDetails: '',
-  hasAllergies: false,
-  allergyDetails: '',
-  hasMobilityLimitations: false,
-  mobilityDetails: '',
-  isPregnant: false,
-  emergencyContactName: '',
-  emergencyContactPhone: '',
-  additionalInfo: '',
+  bookerReference: '',
+  photoConsent: null,
+  conditions: new Set(),
+  propertyDisclaimerAcknowledged: false,
+  specialRequirementsAdvised: null,
+  emailOptIn: false,
+  age16PlusConfirmed: false,
   consentGiven: false,
 };
 
-function YesNoToggle({
-  value,
-  onChange,
-  name,
-}: {
-  value: boolean;
-  onChange: (v: boolean) => void;
-  name: string;
-}) {
-  return (
-    <div className="flex gap-3" role="group" aria-label={name}>
-      <button
-        type="button"
-        onClick={() => onChange(true)}
-        className={`flex-1 rounded-lg border-2 py-3 text-sm font-semibold transition-colors ${
-          value
-            ? 'border-[#006FAC] bg-[#006FAC] text-white'
-            : 'border-[#D4E1E9] bg-white text-[#5A7A8F] hover:border-[#006FAC]'
-        }`}
-      >
-        Yes
-      </button>
-      <button
-        type="button"
-        onClick={() => onChange(false)}
-        className={`flex-1 rounded-lg border-2 py-3 text-sm font-semibold transition-colors ${
-          !value
-            ? 'border-[#006FAC] bg-[#006FAC] text-white'
-            : 'border-[#D4E1E9] bg-white text-[#5A7A8F] hover:border-[#006FAC]'
-        }`}
-      >
-        No
-      </button>
-    </div>
-  );
-}
+const CONDITION_OPTIONS: { key: MedicalConditionKey; label: string }[] = [
+  { key: 'back_neck_arm_knee', label: 'Back/Neck/Arm/Knee problems' },
+  { key: 'rupture_hernia', label: 'Rupture or Hernia' },
+  {
+    key: 'heart_bp_chest',
+    label: 'Heart Disease/High Blood Pressure/Bronchitis/Asthma/chest problems',
+  },
+  { key: 'blackouts_seizures_epilepsy', label: 'Blackouts/Seizures/Epilepsy' },
+  { key: 'pregnant', label: 'Currently or recently pregnant' },
+  { key: 'none', label: 'Not applicable' },
+];
 
 function SectionCard({ children }: { children: React.ReactNode }) {
   return (
@@ -88,13 +47,19 @@ function SectionCard({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Label({ htmlFor, children }: { htmlFor?: string; children: React.ReactNode }) {
+function FieldLabel({
+  htmlFor,
+  required,
+  children,
+}: {
+  htmlFor?: string;
+  required?: boolean;
+  children: React.ReactNode;
+}) {
   return (
-    <label
-      htmlFor={htmlFor}
-      className="mb-1.5 block text-sm font-medium text-[#1A4359]"
-    >
+    <label htmlFor={htmlFor} className="mb-1.5 block text-sm font-medium text-[#1A4359]">
       {children}
+      {required && <span className="ml-1 text-[#DF542F]">*</span>}
     </label>
   );
 }
@@ -105,12 +70,14 @@ function TextInput({
   onChange,
   placeholder,
   type = 'text',
+  required,
 }: {
   id: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   type?: string;
+  required?: boolean;
 }) {
   return (
     <input
@@ -119,35 +86,89 @@ function TextInput({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
+      required={required}
       className="w-full rounded-lg border border-[#D4E1E9] bg-white px-4 py-3 text-[#1A4359] placeholder-[#5A7A8F] focus:border-[#006FAC] focus:outline-none focus:ring-2 focus:ring-[#D4E8F5]"
     />
   );
 }
 
-function Textarea({
-  id,
+function RadioGroup<T extends string>({
+  name,
   value,
+  options,
   onChange,
-  placeholder,
 }: {
-  id: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
+  name: string;
+  value: T | null;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
 }) {
   return (
-    <textarea
-      id={id}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      rows={3}
-      className="w-full rounded-lg border border-[#D4E1E9] bg-white px-4 py-3 text-[#1A4359] placeholder-[#5A7A8F] focus:border-[#006FAC] focus:outline-none focus:ring-2 focus:ring-[#D4E8F5]"
-    />
+    <div className="flex gap-3" role="group">
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          onClick={() => onChange(opt.value)}
+          aria-pressed={value === opt.value}
+          className={`flex-1 rounded-lg border-2 py-3 text-sm font-semibold transition-colors ${
+            value === opt.value
+              ? 'border-[#006FAC] bg-[#006FAC] text-white'
+              : 'border-[#D4E1E9] bg-white text-[#5A7A8F] hover:border-[#006FAC]'
+          }`}
+        >
+          {opt.label}
+        </button>
+      ))}
+      <input type="hidden" name={name} value={value ?? ''} />
+    </div>
   );
 }
 
-export function DeclarationPage({ instructorNumber, territoryPostcode, onSuccess, onBack }: Props) {
+function CheckboxRow({
+  id,
+  checked,
+  onChange,
+  children,
+}: {
+  id: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <label htmlFor={id} className="flex cursor-pointer items-start gap-3">
+      <input
+        id={id}
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer accent-[#006FAC]"
+      />
+      <span className="text-sm text-[#1A4359]">{children}</span>
+    </label>
+  );
+}
+
+function formatEventDate(isoDate: string): string {
+  const d = new Date(isoDate);
+  if (isNaN(d.getTime())) return isoDate;
+  return d.toLocaleDateString('en-GB', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+export function DeclarationPage({
+  instructorNumber,
+  territoryPostcode,
+  courseToken,
+  lockedCourse,
+  onSuccess,
+  onBack,
+}: Props) {
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -156,7 +177,11 @@ export function DeclarationPage({ instructorNumber, territoryPostcode, onSuccess
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  const canSubmit = form.attendeeName.trim().length > 0 && form.consentGiven && !submitting;
+  function handleConditionToggle(key: MedicalConditionKey) {
+    setForm((prev) => ({ ...prev, conditions: toggleCondition(prev.conditions, key) }));
+  }
+
+  const canSubmit = canSubmitForm(form) && !submitting;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -164,16 +189,8 @@ export function DeclarationPage({ instructorNumber, territoryPostcode, onSuccess
     setErrorMessage(null);
     setSubmitting(true);
 
-    const declarationData: DeclarationData = buildDeclarationPayload(form);
-
-    const result = await submitDeclaration({
-      instructor_number: instructorNumber,
-      territory_postcode: territoryPostcode,
-      attendee_name: form.attendeeName.trim(),
-      attendee_email: form.attendeeEmail.trim() || undefined,
-      declaration_data: declarationData,
-      consent_given: true,
-    });
+    const payload = buildSubmitPayload(form, instructorNumber, territoryPostcode, courseToken);
+    const result = await submitDeclaration(payload);
 
     setSubmitting(false);
 
@@ -207,199 +224,212 @@ export function DeclarationPage({ instructorNumber, territoryPostcode, onSuccess
           Back
         </button>
         <h1 className="font-display text-2xl font-bold text-[#1A4359]">Health Declaration</h1>
-        <p className="mt-1 text-sm text-[#5A7A8F]">
-          Please answer honestly — this information helps your instructor keep you safe.
-        </p>
       </header>
 
+      {/* Course confirmation line */}
+      {lockedCourse && (
+        <div className="mb-5 rounded-lg border border-[#D4E8F5] bg-[#EDF5FA] px-4 py-3">
+          <p className="text-sm font-medium text-[#1A4359]">
+            You&apos;re at:{' '}
+            <span className="font-semibold">{lockedCourse.template_name}</span>
+            {' — '}
+            {formatEventDate(lockedCourse.event_date)}
+            {(lockedCourse.venue_name || lockedCourse.venue_postcode)
+              ? `, ${lockedCourse.venue_name || lockedCourse.venue_postcode}`
+              : ''}
+          </p>
+        </div>
+      )}
+
+      {/* Intro copy */}
+      <div className="mb-6 rounded-lg bg-white p-5 shadow-[0_2px_8px_rgba(0,60,100,0.06)]">
+        <p className="text-sm text-[#2D5570]">
+          Welcome to your Daisy First Aid Class. Please complete this form before the class starts.
+        </p>
+      </div>
+
       <form onSubmit={handleSubmit} noValidate className="space-y-5">
-        {/* Attendee details */}
+        {/* 1. Attendee details */}
         <SectionCard>
           <h2 className="mb-4 font-display text-lg font-bold text-[#1A4359]">Your details</h2>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="attendee-name">
-                Full name <span className="text-[#DF542F]">*</span>
-              </Label>
+              <FieldLabel htmlFor="attendee-name" required>
+                Full name
+              </FieldLabel>
               <TextInput
                 id="attendee-name"
                 value={form.attendeeName}
                 onChange={(v) => set('attendeeName', v)}
                 placeholder="Your full name"
+                required
               />
             </div>
+
             <div>
-              <Label htmlFor="attendee-email">
-                Email address <span className="text-[#5A7A8F] font-normal">(optional)</span>
-              </Label>
+              <FieldLabel
+                htmlFor="attendee-email"
+                required={form.emailOptIn}
+              >
+                Email
+                {!form.emailOptIn && (
+                  <span className="ml-1 font-normal text-[#5A7A8F]">(optional)</span>
+                )}
+              </FieldLabel>
               <TextInput
                 id="attendee-email"
                 type="email"
                 value={form.attendeeEmail}
                 onChange={(v) => set('attendeeEmail', v)}
                 placeholder="your@email.com"
+                required={form.emailOptIn}
               />
-              <p className="mt-1 text-xs text-[#5A7A8F]">
-                Used only if your instructor needs to contact you about your declaration.
-              </p>
             </div>
           </div>
         </SectionCard>
 
-        {/* Medical conditions */}
+        {/* 2. Booker reference */}
         <SectionCard>
-          <h2 className="mb-4 font-display text-lg font-bold text-[#1A4359]">Medical conditions</h2>
-          <div className="space-y-4">
-            <div>
-              <Label>Do you have any medical conditions we should be aware of?</Label>
-              <YesNoToggle
-                value={form.hasMedicalConditions}
-                onChange={(v) => set('hasMedicalConditions', v)}
-                name="Has medical conditions"
-              />
-            </div>
-            {form.hasMedicalConditions && (
-              <div>
-                <Label htmlFor="medical-details">Please provide details</Label>
-                <Textarea
-                  id="medical-details"
-                  value={form.medicalConditionDetails}
-                  onChange={(v) => set('medicalConditionDetails', v)}
-                  placeholder="e.g. epilepsy, diabetes, heart condition..."
-                />
-              </div>
-            )}
-          </div>
+          <FieldLabel htmlFor="booker-reference">
+            Who made the booking?
+          </FieldLabel>
+          <TextInput
+            id="booker-reference"
+            value={form.bookerReference}
+            onChange={(v) => set('bookerReference', v)}
+            placeholder="e.g. Sarah Jones"
+          />
+          <p className="mt-1.5 text-xs text-[#5A7A8F]">
+            e.g. the person who paid — this links your form to the right booking. If you booked
+            yourself, put your own name.
+          </p>
         </SectionCard>
 
-        {/* Allergies */}
+        {/* 3. Photo consent */}
         <SectionCard>
-          <h2 className="mb-4 font-display text-lg font-bold text-[#1A4359]">Allergies</h2>
-          <div className="space-y-4">
-            <div>
-              <Label>Do you have any known allergies?</Label>
-              <YesNoToggle
-                value={form.hasAllergies}
-                onChange={(v) => set('hasAllergies', v)}
-                name="Has allergies"
-              />
-            </div>
-            {form.hasAllergies && (
-              <div>
-                <Label htmlFor="allergy-details">Please provide details</Label>
-                <Textarea
-                  id="allergy-details"
-                  value={form.allergyDetails}
-                  onChange={(v) => set('allergyDetails', v)}
-                  placeholder="e.g. latex, penicillin, nuts..."
-                />
-              </div>
-            )}
-          </div>
-        </SectionCard>
-
-        {/* Mobility */}
-        <SectionCard>
-          <h2 className="mb-4 font-display text-lg font-bold text-[#1A4359]">Mobility</h2>
-          <div className="space-y-4">
-            <div>
-              <Label>Do you have any mobility limitations or physical restrictions?</Label>
-              <YesNoToggle
-                value={form.hasMobilityLimitations}
-                onChange={(v) => set('hasMobilityLimitations', v)}
-                name="Has mobility limitations"
-              />
-            </div>
-            {form.hasMobilityLimitations && (
-              <div>
-                <Label htmlFor="mobility-details">Please provide details</Label>
-                <Textarea
-                  id="mobility-details"
-                  value={form.mobilityDetails}
-                  onChange={(v) => set('mobilityDetails', v)}
-                  placeholder="e.g. back injury, wheelchair user, recent surgery..."
-                />
-              </div>
-            )}
-          </div>
-        </SectionCard>
-
-        {/* Pregnancy */}
-        <SectionCard>
-          <h2 className="mb-4 font-display text-lg font-bold text-[#1A4359]">Pregnancy</h2>
-          <Label>Are you currently pregnant?</Label>
-          <YesNoToggle
-            value={form.isPregnant}
-            onChange={(v) => set('isPregnant', v)}
-            name="Is pregnant"
+          <p className="mb-3 text-sm font-medium text-[#1A4359]">
+            Can we use any photos taken of you or your minors today for Daisy First Aid
+            promotion?
+            <span className="ml-1 text-[#DF542F]">*</span>
+          </p>
+          <RadioGroup<'yes' | 'no'>
+            name="photo-consent"
+            value={form.photoConsent === null ? null : form.photoConsent ? 'yes' : 'no'}
+            options={[
+              { value: 'yes', label: 'Yes' },
+              { value: 'no', label: 'No' },
+            ]}
+            onChange={(v) => set('photoConsent', v === 'yes')}
           />
         </SectionCard>
 
-        {/* Emergency contact */}
+        {/* 4. Medical conditions */}
         <SectionCard>
-          <h2 className="mb-4 font-display text-lg font-bold text-[#1A4359]">Emergency contact</h2>
-          <p className="mb-4 text-sm text-[#5A7A8F]">Optional but recommended.</p>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="ec-name">Contact name</Label>
-              <TextInput
-                id="ec-name"
-                value={form.emergencyContactName}
-                onChange={(v) => set('emergencyContactName', v)}
-                placeholder="Full name"
-              />
-            </div>
-            <div>
-              <Label htmlFor="ec-phone">Contact phone number</Label>
-              <TextInput
-                id="ec-phone"
-                type="tel"
-                value={form.emergencyContactPhone}
-                onChange={(v) => set('emergencyContactPhone', v)}
-                placeholder="07700 000000"
-              />
-            </div>
+          <p className="mb-3 text-sm font-medium text-[#1A4359]">
+            Please inform your trainer if you are currently suffering or have ever suffered from
+            the following medical problems or conditions&hellip;
+            <span className="ml-1 text-[#DF542F]">*</span>
+          </p>
+          <div className="space-y-2.5">
+            {CONDITION_OPTIONS.map(({ key, label }) => (
+              <CheckboxRow
+                key={key}
+                id={`condition-${key}`}
+                checked={form.conditions.has(key)}
+                onChange={() => handleConditionToggle(key)}
+              >
+                {label}
+              </CheckboxRow>
+            ))}
           </div>
+          <p className="mt-4 text-xs text-[#5A7A8F]">
+            Please note that we reserve the right to prevent you from completing this course if
+            you attend with any of the above medical conditions or if you are pregnant and we feel
+            you will put yourself or others at risk.
+          </p>
         </SectionCard>
 
-        {/* Additional info */}
+        {/* 5. Property disclaimer */}
         <SectionCard>
-          <h2 className="mb-4 font-display text-lg font-bold text-[#1A4359]">Anything else?</h2>
-          <Label htmlFor="additional-info">
-            Any other information your instructor should know <span className="font-normal text-[#5A7A8F]">(optional)</span>
-          </Label>
-          <Textarea
-            id="additional-info"
-            value={form.additionalInfo}
-            onChange={(v) => set('additionalInfo', v)}
-            placeholder="Any other health or safety information..."
+          <CheckboxRow
+            id="property-disclaimer"
+            checked={form.propertyDisclaimerAcknowledged}
+            onChange={(v) => set('propertyDisclaimerAcknowledged', v)}
+          >
+            <span>
+              I acknowledge that Daisy First Aid cannot be held responsible for loss or damage to
+              personal property while attending the course.
+              <span className="ml-1 text-[#DF542F]">*</span>
+            </span>
+          </CheckboxRow>
+        </SectionCard>
+
+        {/* 6. Special requirements */}
+        <SectionCard>
+          <p className="mb-3 text-sm font-medium text-[#1A4359]">
+            I have advised my trainer of any special requirements I may have.
+            <span className="ml-1 text-[#DF542F]">*</span>
+          </p>
+          <RadioGroup<SpecialRequirementsChoice>
+            name="special-requirements"
+            value={form.specialRequirementsAdvised}
+            options={[
+              { value: 'yes', label: 'Yes' },
+              { value: 'not_applicable', label: 'Not applicable' },
+            ]}
+            onChange={(v) => set('specialRequirementsAdvised', v)}
           />
         </SectionCard>
 
-        {/* GDPR consent — prominent, required */}
+        {/* 7. Email opt-in */}
+        <SectionCard>
+          <CheckboxRow
+            id="email-opt-in"
+            checked={form.emailOptIn}
+            onChange={(v) => set('emailOptIn', v)}
+          >
+            I&apos;d like to get emails packed full of useful content to help me.
+          </CheckboxRow>
+        </SectionCard>
+
+        {/* 8. Age confirmation */}
+        <SectionCard>
+          <CheckboxRow
+            id="age-16-plus"
+            checked={form.age16PlusConfirmed}
+            onChange={(v) => set('age16PlusConfirmed', v)}
+          >
+            <span>
+              I confirm that I am at least 16 years of age or older.
+              <span className="ml-1 text-[#DF542F]">*</span>
+            </span>
+          </CheckboxRow>
+        </SectionCard>
+
+        {/* 9. GDPR / storage consent */}
         <div className="rounded-lg border-2 border-[#006FAC] bg-[#EDF5FA] p-5">
           <h2 className="mb-3 font-display text-lg font-bold text-[#1A4359]">
             Consent to store health information
           </h2>
           <p className="mb-4 text-sm text-[#2D5570]">
             The information you have provided above is{' '}
-            <strong>special-category health data</strong> under UK GDPR. Daisy First Aid will store
-            it securely and use it solely to support the safe running of your first aid course.
-            It will not be shared with third parties or used for marketing. You may request deletion
-            at any time by contacting your instructor.
+            <strong>special-category health data</strong> under UK GDPR. Daisy First Aid will
+            store it securely and use it solely to support the safe running of your first aid
+            course. It will not be shared with third parties or used for marketing. You may
+            request deletion at any time by contacting your instructor.
           </p>
-          <label className="flex cursor-pointer items-start gap-3">
-            <input
-              type="checkbox"
-              checked={form.consentGiven}
-              onChange={(e) => set('consentGiven', e.target.checked)}
-              className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer accent-[#006FAC]"
-            />
-            <span className="text-sm font-medium text-[#1A4359]">
+          <CheckboxRow
+            id="consent-given"
+            checked={form.consentGiven}
+            onChange={(v) => set('consentGiven', v)}
+          >
+            <span>
               I consent to Daisy First Aid storing this health information for the purpose of
-              running my first aid course safely, in accordance with their privacy policy.
+              running my first aid course safely, in accordance with their privacy policy and GDPR
+              terms. I understand I have the right to access or request deletion of my data.
+              <span className="ml-1 text-[#DF542F]">*</span>
             </span>
-          </label>
+          </CheckboxRow>
         </div>
 
         {/* Error */}
@@ -423,7 +453,7 @@ export function DeclarationPage({ instructorNumber, territoryPostcode, onSuccess
 
         {!form.consentGiven && (
           <p className="text-center text-xs text-[#5A7A8F]">
-            You must tick the consent box before submitting.
+            Please complete all required fields before submitting.
           </p>
         )}
       </form>
