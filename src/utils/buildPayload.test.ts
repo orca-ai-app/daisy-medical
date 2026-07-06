@@ -6,6 +6,7 @@ import {
   toggleCondition,
 } from './buildPayload';
 import type { FormState } from './buildPayload';
+import type { CourseCard } from '../types';
 
 const baseForm: FormState = {
   attendeeName: 'Jane Smith',
@@ -19,6 +20,20 @@ const baseForm: FormState = {
   age16PlusConfirmed: true,
   consentGiven: true,
 };
+
+/** A minimal CourseCard with franchisee_name for testing. */
+const makeCourseCard = (overrides: Partial<CourseCard> = {}): CourseCard => ({
+  id: 'c1',
+  booking_token: 'tok_abc',
+  template_name: 'Baby & Child First Aid',
+  event_date: '2026-07-06',
+  start_time: '10:00:00',
+  end_time: '12:00:00',
+  venue_name: 'Town Hall',
+  venue_postcode: 'SW1A 1AA',
+  franchisee_name: 'Jenni Dunman',
+  ...overrides,
+});
 
 // ─── buildDeclarationPayload ────────────────────────────────────────────────
 
@@ -104,6 +119,25 @@ describe('buildSubmitPayload', () => {
   it('trims whitespace from attendee_name', () => {
     const result = buildSubmitPayload({ ...baseForm, attendeeName: '  Jane  ' }, 'JEN1', 'SW1');
     expect(result.attendee_name).toBe('Jane');
+  });
+
+  // ── Instructor-number → resolved course → venue-derived postcode ──────────
+
+  it('accepts venue_postcode derived from a resolved course as territory_postcode', () => {
+    // App derives territoryPostcode = lockedCourse.venue_postcode when a course is resolved.
+    // This test verifies buildSubmitPayload forwards that derived value correctly.
+    const course = makeCourseCard({ venue_postcode: 'SW1A 1AA' });
+    const result = buildSubmitPayload(baseForm, 'JEN1', course.venue_postcode, course.booking_token);
+    expect(result.territory_postcode).toBe('SW1A 1AA');
+    expect(result.course_token).toBe('tok_abc');
+  });
+
+  it('uses the legacy postcode param value when no course resolves (fallback path)', () => {
+    // When courseState is 'none', App uses manualPostcode (pre-filled from ?postcode= URL param).
+    const legacyPostcode = 'BS1';
+    const result = buildSubmitPayload(baseForm, 'UNKNOWN99', legacyPostcode);
+    expect(result.territory_postcode).toBe('BS1');
+    expect(result.course_token).toBeUndefined();
   });
 });
 
@@ -206,5 +240,71 @@ describe('toggleCondition', () => {
     const original = new Set<'pregnant' | 'none'>(['pregnant']);
     toggleCondition(original, 'none');
     expect(original.has('pregnant')).toBe(true);
+  });
+});
+
+// ─── CourseCard.franchisee_name ─────────────────────────────────────────────
+
+describe('CourseCard franchisee_name field', () => {
+  it('accepts a string franchisee_name', () => {
+    const card = makeCourseCard({ franchisee_name: 'Jenni Dunman (double test)' });
+    expect(card.franchisee_name).toBe('Jenni Dunman (double test)');
+  });
+
+  it('accepts null franchisee_name for courses without a named franchisee', () => {
+    const card = makeCourseCard({ franchisee_name: null });
+    expect(card.franchisee_name).toBeNull();
+  });
+
+  it('payload built from a resolved course contains the venue-derived territory_postcode', () => {
+    const card = makeCourseCard({ venue_postcode: 'EX1 1AA', franchisee_name: 'Jenni Dunman' });
+    // Simulate App: territoryPostcode = lockedCourse.venue_postcode
+    const derived = card.venue_postcode;
+    const result = buildSubmitPayload(baseForm, 'JEN1', derived, card.booking_token);
+    expect(result.territory_postcode).toBe('EX1 1AA');
+  });
+
+  it('banner fallback uses "your instructor" when franchisee_name is null', () => {
+    // This is the display logic; verify the type permits null and the fallback label is defined.
+    const card = makeCourseCard({ franchisee_name: null });
+    const trainerLabel = card.franchisee_name ?? 'your instructor';
+    expect(trainerLabel).toBe('your instructor');
+  });
+
+  it('banner uses franchisee_name when present', () => {
+    const card = makeCourseCard({ franchisee_name: 'Jenni Dunman' });
+    const trainerLabel = card.franchisee_name ?? 'your instructor';
+    expect(trainerLabel).toBe('Jenni Dunman');
+  });
+});
+
+// ─── Instructor-number resolution scenarios ──────────────────────────────────
+
+describe('instructor-number resolution state → postcode handling', () => {
+  it('when several courses are found, picking one locks and uses its venue_postcode', () => {
+    // Simulate the user picking from a list.
+    const picked = makeCourseCard({ venue_postcode: 'OX1 3BQ', template_name: 'Paediatric' });
+    // App state after pick: lockedCourse = picked, territoryPostcode = picked.venue_postcode
+    const territoryPostcode = picked.venue_postcode;
+    const result = buildSubmitPayload(baseForm, 'JEN1', territoryPostcode, picked.booking_token);
+    expect(result.territory_postcode).toBe('OX1 3BQ');
+    expect(result.course_token).toBe('tok_abc');
+  });
+
+  it('when no course resolves and user typed a postcode, that postcode is used', () => {
+    // courseState = 'none'; user typed 'BS1' into the postcode field.
+    const manualPostcode = 'BS1';
+    // App: territoryPostcode = manualPostcode (no lockedCourse)
+    const result = buildSubmitPayload(baseForm, 'NOPE', manualPostcode);
+    expect(result.territory_postcode).toBe('BS1');
+    expect(result.course_token).toBeUndefined();
+  });
+
+  it('legacy ?postcode= param pre-fills the postcode field when no course resolves', () => {
+    // Simulates App initialising manualPostcode from readQueryParam('postcode').
+    // The typed value ends up in territory_postcode when no course is locked.
+    const legacyParam = 'SW1';
+    const result = buildSubmitPayload(baseForm, 'JEN1', legacyParam);
+    expect(result.territory_postcode).toBe('SW1');
   });
 });

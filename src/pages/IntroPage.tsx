@@ -1,36 +1,58 @@
+import type React from 'react';
 import type { CourseCard, CourseResolutionState } from '../types';
+import { lookupCourses } from '../api';
 
 interface Props {
   instructorNumber: string;
-  territoryPostcode: string;
+  manualPostcode: string;
   onInstructorChange: (v: string) => void;
-  onPostcodeChange: (v: string) => void;
+  onManualPostcodeChange: (v: string) => void;
   courseState: CourseResolutionState;
   onCourseSelected: (course: CourseCard) => void;
+  onCourseReset: () => void;
+  onCourseStateChange: (state: CourseResolutionState) => void;
   onStart: () => void;
 }
 
-function formatEventDate(isoDate: string): string {
-  const d = new Date(isoDate);
-  if (isNaN(d.getTime())) return isoDate;
-  return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+/** Format HH:MM from a time string that may be HH:MM:SS or HH:MM. */
+function formatStartTime(time: string): string {
+  return time.slice(0, 5);
 }
 
-function CourseConfirmation({ course }: { course: CourseCard }) {
-  const location = course.venue_name || course.venue_postcode;
+/** Confirmation banner shown once a course is identified. */
+function CourseConfirmationBanner({
+  course,
+  onReset,
+}: {
+  course: CourseCard;
+  onReset: () => void;
+}) {
+  const trainerLabel = course.franchisee_name ?? 'your instructor';
   return (
-    <div className="mb-6 rounded-lg border border-[#D4E8F5] bg-[#EDF5FA] px-4 py-3">
-      <p className="text-sm font-medium text-[#1A4359]">
-        You&apos;re at:{' '}
-        <span className="font-semibold">{course.template_name}</span>
+    <div
+      role="status"
+      aria-live="polite"
+      className="mb-6 rounded-xl border border-[#006FAC] bg-[#EDF5FA] px-5 py-4 shadow-[0_2px_12px_rgba(0,111,172,0.10)]"
+    >
+      <p className="text-base font-semibold text-[#1A4359]">
+        You&apos;re at{' '}
+        <span className="text-[#006FAC]">{trainerLabel}</span>&apos;s class:{' '}
+        <span className="font-bold">{course.template_name}</span>
         {' — '}
-        {formatEventDate(course.event_date)}
-        {location ? `, ${location}` : ''}
+        today, {formatStartTime(course.start_time)}
       </p>
+      <button
+        type="button"
+        onClick={onReset}
+        className="mt-2 text-xs text-[#5A7A8F] underline underline-offset-2 hover:text-[#006FAC]"
+      >
+        Not right? Change number
+      </button>
     </div>
   );
 }
 
+/** One-tap picker when several courses are found for the same instructor. */
 function CoursePicker({
   courses,
   onSelect,
@@ -55,7 +77,7 @@ function CoursePicker({
               {course.template_name}
             </span>
             <span className="block text-xs text-[#5A7A8F]">
-              {course.start_time}
+              {formatStartTime(course.start_time)}
               {course.venue_name ? ` — ${course.venue_name}` : ''}
               {!course.venue_name && course.venue_postcode ? ` — ${course.venue_postcode}` : ''}
             </span>
@@ -68,14 +90,68 @@ function CoursePicker({
 
 export function IntroPage({
   instructorNumber,
-  territoryPostcode,
+  manualPostcode,
   onInstructorChange,
-  onPostcodeChange,
+  onManualPostcodeChange,
   courseState,
   onCourseSelected,
+  onCourseReset,
+  onCourseStateChange,
   onStart,
 }: Props) {
-  const canStart = instructorNumber.trim().length > 0;
+  const courseResolved = courseState.status === 'locked';
+  const showPicker = courseState.status === 'pick';
+  const courseNone = courseState.status === 'none';
+
+  // Show the "no class found" message only when: lookup is done, number was entered, and nothing resolved.
+  const showNoneMessage = courseNone && instructorNumber.trim().length > 0;
+
+  // Postcode is required in the no-course path if the user has entered an instructor number.
+  const postcodeRequired = !courseResolved && instructorNumber.trim().length > 0;
+
+  const canStart =
+    courseState.status === 'loading' || showPicker
+      ? false
+      : courseResolved ||
+        (courseNone &&
+          instructorNumber.trim().length > 0 &&
+          manualPostcode.trim().length > 0) ||
+        // Edge case: no instructor entered but legacy postcode param present.
+        (courseNone &&
+          instructorNumber.trim().length === 0 &&
+          manualPostcode.trim().length > 0);
+
+  async function runLookup(number: string) {
+    const trimmed = number.trim();
+    if (!trimmed) return;
+    onCourseStateChange({ status: 'loading' });
+    const result = await lookupCourses({ instructor_number: trimmed });
+    if (!result.ok) {
+      onCourseStateChange({ status: 'none' });
+      return;
+    }
+    if (result.courses.length === 0) {
+      onCourseStateChange({ status: 'none' });
+    } else if (result.courses.length === 1) {
+      onCourseStateChange({ status: 'locked', course: result.courses[0] });
+    } else {
+      onCourseStateChange({ status: 'pick', courses: result.courses });
+    }
+  }
+
+  function handleInstructorBlur() {
+    // Trigger lookup when the user leaves the field and the course hasn't been resolved yet.
+    if (instructorNumber.trim() && courseState.status !== 'locked') {
+      void runLookup(instructorNumber);
+    }
+  }
+
+  function handleInstructorKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      void runLookup(instructorNumber);
+    }
+  }
 
   return (
     <main className="mx-auto max-w-lg px-4 py-10">
@@ -107,14 +183,20 @@ export function IntroPage({
         </div>
       )}
 
-      {/* Course resolution: locked */}
-      {courseState.status === 'locked' && (
-        <CourseConfirmation course={courseState.course} />
+      {/* Course resolved: confirmation banner */}
+      {courseResolved && (
+        <CourseConfirmationBanner
+          course={(courseState as { status: 'locked'; course: CourseCard }).course}
+          onReset={onCourseReset}
+        />
       )}
 
-      {/* Course resolution: multiple — show picker */}
-      {courseState.status === 'pick' && (
-        <CoursePicker courses={courseState.courses} onSelect={onCourseSelected} />
+      {/* Multiple courses: one-tap picker */}
+      {showPicker && (
+        <CoursePicker
+          courses={(courseState as { status: 'pick'; courses: CourseCard[] }).courses}
+          onSelect={onCourseSelected}
+        />
       )}
 
       {/* Intro text */}
@@ -131,45 +213,65 @@ export function IntroPage({
 
       {/* Fields */}
       <div className="space-y-5">
-        <div>
-          <label
-            htmlFor="instructor-number"
-            className="mb-1.5 block text-sm font-medium text-[#1A4359]"
-          >
-            Instructor number
-          </label>
-          <input
-            id="instructor-number"
-            type="text"
-            value={instructorNumber}
-            onChange={(e) => onInstructorChange(e.target.value.toUpperCase())}
-            placeholder="e.g. JEN1"
-            autoCapitalize="characters"
-            className="w-full rounded-lg border border-[#D4E1E9] bg-white px-4 py-3 text-[#1A4359] placeholder-[#5A7A8F] focus:border-[#006FAC] focus:outline-none focus:ring-2 focus:ring-[#D4E8F5]"
-          />
-          <p className="mt-1 text-xs text-[#5A7A8F]">
-            Your instructor&apos;s number — shown on the QR code sheet.
-          </p>
-        </div>
+        {/* Instructor number — hero field; hidden once course is confirmed */}
+        {!courseResolved && (
+          <div>
+            <label
+              htmlFor="instructor-number"
+              className="mb-1.5 block text-sm font-medium text-[#1A4359]"
+            >
+              Your instructor&apos;s number
+            </label>
+            <input
+              id="instructor-number"
+              type="text"
+              value={instructorNumber}
+              onChange={(e) => onInstructorChange(e.target.value.toUpperCase())}
+              onBlur={handleInstructorBlur}
+              onKeyDown={handleInstructorKeyDown}
+              placeholder="e.g. 42"
+              autoCapitalize="characters"
+              autoComplete="off"
+              className="w-full rounded-lg border border-[#D4E1E9] bg-white px-4 py-3 text-lg text-[#1A4359] placeholder-[#5A7A8F] focus:border-[#006FAC] focus:outline-none focus:ring-2 focus:ring-[#D4E8F5]"
+            />
+            <p className="mt-1 text-xs text-[#5A7A8F]">
+              Your trainer will tell you this — e.g. 42
+            </p>
 
-        <div>
-          <label
-            htmlFor="postcode"
-            className="mb-1.5 block text-sm font-medium text-[#1A4359]"
-          >
-            Area postcode prefix
-            <span className="ml-1 font-normal text-[#5A7A8F]">(optional)</span>
-          </label>
-          <input
-            id="postcode"
-            type="text"
-            value={territoryPostcode}
-            onChange={(e) => onPostcodeChange(e.target.value.toUpperCase())}
-            placeholder="e.g. SW1"
-            autoCapitalize="characters"
-            className="w-full rounded-lg border border-[#D4E1E9] bg-white px-4 py-3 text-[#1A4359] placeholder-[#5A7A8F] focus:border-[#006FAC] focus:outline-none focus:ring-2 focus:ring-[#D4E8F5]"
-          />
-        </div>
+            {/* No-class-found inline message */}
+            {showNoneMessage && (
+              <p role="status" aria-live="polite" className="mt-2 text-sm text-[#5A7A8F]">
+                We couldn&apos;t find a class for that number today — please check with your
+                trainer.
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Postcode — shown only when no course resolved (generic fallback) */}
+        {!courseResolved && (
+          <div>
+            <label
+              htmlFor="postcode"
+              className="mb-1.5 block text-sm font-medium text-[#1A4359]"
+            >
+              Postcode area
+              {postcodeRequired && <span className="ml-1 text-[#DF542F]">*</span>}
+            </label>
+            <input
+              id="postcode"
+              type="text"
+              value={manualPostcode}
+              onChange={(e) => onManualPostcodeChange(e.target.value.toUpperCase())}
+              placeholder="e.g. SW1"
+              autoCapitalize="characters"
+              className="w-full rounded-lg border border-[#D4E1E9] bg-white px-4 py-3 text-[#1A4359] placeholder-[#5A7A8F] focus:border-[#006FAC] focus:outline-none focus:ring-2 focus:ring-[#D4E8F5]"
+            />
+            <p className="mt-1 text-xs text-[#5A7A8F]">
+              The postcode area where your class is happening — ask your trainer.
+            </p>
+          </div>
+        )}
       </div>
 
       <button

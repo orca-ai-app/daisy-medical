@@ -15,27 +15,31 @@ export default function App() {
   const [instructorNumber, setInstructorNumber] = useState<string>(() =>
     readQueryParam('instructor'),
   );
-  const [territoryPostcode, setTerritoryPostcode] = useState<string>(() =>
-    readQueryParam('postcode'),
-  );
+  // Postcode for the no-course fallback path; pre-filled from legacy ?postcode= QR param.
+  const [manualPostcode, setManualPostcode] = useState<string>(() => readQueryParam('postcode'));
   const [courseState, setCourseState] = useState<CourseResolutionState>({ status: 'idle' });
 
-  // On mount, attempt course resolution from query params.
+  // When a course is locked, derive territory_postcode from its venue; else use manually entered value.
+  const lockedCourse = courseState.status === 'locked' ? courseState.course : undefined;
+  const territoryPostcode = lockedCourse ? lockedCourse.venue_postcode : manualPostcode;
+
+  // On mount: attempt course resolution from query params.
   useEffect(() => {
     const courseToken = readQueryParam('course');
     const instructor = readQueryParam('instructor');
 
     if (courseToken) {
+      // Highest-priority: legacy `course` booking-token param.
       setCourseState({ status: 'loading' });
       lookupCourses({ booking_token: courseToken }).then((result) => {
         if (result.ok && result.courses.length > 0) {
           setCourseState({ status: 'locked', course: result.courses[0] });
         } else {
-          // Token not found — fall back to generic flow
           setCourseState({ status: 'none' });
         }
       });
     } else if (instructor) {
+      // New QR: instructor number only.
       setCourseState({ status: 'loading' });
       lookupCourses({ instructor_number: instructor }).then((result) => {
         if (!result.ok || result.courses.length === 0) {
@@ -55,18 +59,24 @@ export default function App() {
     setCourseState({ status: 'locked', course });
   }
 
-  const lockedCourse = courseState.status === 'locked' ? courseState.course : undefined;
+  function handleResetCourse() {
+    setCourseState({ status: 'none' });
+    setInstructorNumber('');
+    setManualPostcode('');
+  }
 
   return (
     <div className="min-h-screen bg-[#F5F9FB] font-sans">
       {step === 'intro' && (
         <IntroPage
           instructorNumber={instructorNumber}
-          territoryPostcode={territoryPostcode}
+          manualPostcode={manualPostcode}
           onInstructorChange={setInstructorNumber}
-          onPostcodeChange={setTerritoryPostcode}
+          onManualPostcodeChange={setManualPostcode}
           courseState={courseState}
           onCourseSelected={handleCourseSelected}
+          onCourseReset={handleResetCourse}
+          onCourseStateChange={setCourseState}
           onStart={() => setStep('declaration')}
         />
       )}

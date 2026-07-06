@@ -7,6 +7,7 @@ export interface CourseCard {
   end_time: string;
   venue_name: string;
   venue_postcode: string;
+  franchisee_name: string | null;
 }
 
 export type MedicalConditionKey =
