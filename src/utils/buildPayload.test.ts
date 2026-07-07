@@ -116,6 +116,28 @@ describe('buildSubmitPayload', () => {
     expect(result.consent_given).toBe(true);
   });
 
+  it('omits submission_id when not provided', () => {
+    const result = buildSubmitPayload(baseForm, 'JEN1', 'SW1');
+    expect(result.submission_id).toBeUndefined();
+  });
+
+  it('includes submission_id when provided (idempotent retries)', () => {
+    const result = buildSubmitPayload(
+      baseForm,
+      'JEN1',
+      'SW1',
+      undefined,
+      '4f7c9a2e-1b3d-4c5e-8f6a-0d1e2f3a4b5c',
+    );
+    expect(result.submission_id).toBe('4f7c9a2e-1b3d-4c5e-8f6a-0d1e2f3a4b5c');
+  });
+
+  it('includes both course_token and submission_id when both provided', () => {
+    const result = buildSubmitPayload(baseForm, 'JEN1', 'SW1', 'tok_abc', 'uuid-1');
+    expect(result.course_token).toBe('tok_abc');
+    expect(result.submission_id).toBe('uuid-1');
+  });
+
   it('trims whitespace from attendee_name', () => {
     const result = buildSubmitPayload({ ...baseForm, attendeeName: '  Jane  ' }, 'JEN1', 'SW1');
     expect(result.attendee_name).toBe('Jane');

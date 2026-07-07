@@ -39,6 +39,7 @@ export function buildSubmitPayload(
   instructorNumber: string,
   territoryPostcode: string,
   courseToken?: string,
+  submissionId?: string,
 ): SubmitPayload {
   const payload: SubmitPayload = {
     instructor_number: instructorNumber,
@@ -52,6 +53,12 @@ export function buildSubmitPayload(
 
   if (courseToken) {
     payload.course_token = courseToken;
+  }
+
+  // Client-generated UUID, held constant across retries so the backend can
+  // deduplicate a submission whose first attempt actually landed.
+  if (submissionId) {
+    payload.submission_id = submissionId;
   }
 
   const booker = form.bookerReference.trim();

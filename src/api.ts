@@ -1,17 +1,25 @@
 import { EDGE_FUNCTION_URL, SUPABASE_ANON_KEY, SUPABASE_URL } from './config';
-import type { CourseCard, SubmitPayload } from './types';
+import { logger } from './logger';
+import type { CourseCard, FailureKind, SubmitPayload } from './types';
 
-export type SubmitResult = { ok: true } | { ok: false; message: string };
+export type SubmitResult =
+  | { ok: true; reference?: string }
+  | { ok: false; kind: FailureKind; message: string };
 
 export type CourseLookupResult =
   | { ok: true; courses: CourseCard[] }
-  | { ok: false; message: string };
+  | { ok: false; kind: FailureKind; message: string };
 
 const API_HEADERS = {
   'Content-Type': 'application/json',
   apikey: SUPABASE_ANON_KEY,
   Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
 } as const;
+
+/** Append the server's request id so parents can quote it to support. */
+function withRef(message: string, requestId?: string): string {
+  return requestId ? `${message} (ref ${requestId})` : message;
+}
 
 export async function submitDeclaration(payload: SubmitPayload): Promise<SubmitResult> {
   let response: Response;
@@ -21,19 +29,37 @@ export async function submitDeclaration(payload: SubmitPayload): Promise<SubmitR
       headers: API_HEADERS,
       body: JSON.stringify(payload),
     });
-  } catch {
-    return { ok: false, message: 'Network error — please check your connection and try again.' };
+  } catch (err) {
+    logger.warn('Network failure submitting declaration', { error: String(err) });
+    return {
+      ok: false,
+      kind: 'network',
+      message: 'Network error — please check your connection and try again.',
+    };
   }
 
-  if (response.status === 201) {
-    return { ok: true };
+  if (response.ok) {
+    let reference: string | undefined;
+    try {
+      const body = (await response.json()) as { reference?: string };
+      if (typeof body.reference === 'string') reference = body.reference;
+    } catch {
+      /* older deployments return an empty 201 body — still a success */
+    }
+    return { ok: true, reference };
   }
 
   let errorMessage = `Unexpected error (${response.status}).`;
+  let requestId: string | undefined;
   try {
-    const body = (await response.json()) as { error?: string; message?: string };
+    const body = (await response.json()) as {
+      error?: string;
+      message?: string;
+      request_id?: string;
+    };
     if (body.error) errorMessage = body.error;
     else if (body.message) errorMessage = body.message;
+    if (body.request_id) requestId = body.request_id;
   } catch {}
 
   if (response.status === 404) {
@@ -42,7 +68,12 @@ export async function submitDeclaration(payload: SubmitPayload): Promise<SubmitR
     errorMessage = errorMessage || 'Invalid submission. Please check your details and try again.';
   }
 
-  return { ok: false, message: errorMessage };
+  logger.error(
+    `submit-medical-declaration failed (${response.status}): ${errorMessage}`,
+    undefined,
+    requestId,
+  );
+  return { ok: false, kind: 'server', message: withRef(errorMessage, requestId) };
 }
 
 /**
@@ -59,18 +90,32 @@ export async function lookupCourses(
       headers: API_HEADERS,
       body: JSON.stringify(by),
     });
-  } catch {
-    return { ok: false, message: 'Network error — could not look up your class.' };
+  } catch (err) {
+    logger.warn('Network failure looking up courses', { error: String(err) });
+    return {
+      ok: false,
+      kind: 'network',
+      message: "We couldn't connect. Check your internet connection and try again.",
+    };
   }
 
   if (!response.ok) {
-    return { ok: false, message: `Could not load class information (${response.status}).` };
+    let message = `Something went wrong looking up your class (${response.status}).`;
+    let requestId: string | undefined;
+    try {
+      const body = (await response.json()) as { error?: string; request_id?: string };
+      if (body.error) message = body.error;
+      if (body.request_id) requestId = body.request_id;
+    } catch {}
+    logger.error(`get-public-courses failed (${response.status}): ${message}`, undefined, requestId);
+    return { ok: false, kind: 'server', message: withRef(message, requestId) };
   }
 
   try {
     const body = (await response.json()) as { courses: CourseCard[] };
     return { ok: true, courses: body.courses ?? [] };
   } catch {
-    return { ok: false, message: 'Unexpected response from course lookup.' };
+    logger.error('get-public-courses returned a malformed response');
+    return { ok: false, kind: 'server', message: 'Unexpected response from course lookup.' };
   }
 }

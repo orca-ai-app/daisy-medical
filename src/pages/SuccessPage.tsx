@@ -1,4 +1,9 @@
-export function SuccessPage() {
+interface Props {
+  /** Short reference returned by submit-medical-declaration, when available. */
+  reference?: string | null;
+}
+
+export function SuccessPage({ reference }: Props) {
   return (
     <main className="mx-auto max-w-lg px-4 py-16 text-center">
       <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-[#67A671]">
@@ -19,6 +24,17 @@ export function SuccessPage() {
       <p className="mt-4 text-[#2D5570]">
         Thank you. Your health declaration has been received by your instructor.
       </p>
+      {reference && (
+        <div className="mt-6 rounded-lg border border-[#D4E1E9] bg-white px-5 py-4">
+          <p className="text-sm text-[#5A7A8F]">Your reference</p>
+          <p className="mt-1 font-mono text-2xl font-bold tracking-wider text-[#006FAC]">
+            {reference}
+          </p>
+          <p className="mt-2 text-xs text-[#5A7A8F]">
+            Screenshot or note this down in case you need to refer to your declaration later.
+          </p>
+        </div>
+      )}
       <p className="mt-3 text-sm text-[#5A7A8F]">
         You can now put your phone away and enjoy your first aid course.
       </p>

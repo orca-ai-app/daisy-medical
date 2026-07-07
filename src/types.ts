@@ -32,6 +32,8 @@ export interface SubmitPayload {
   instructor_number: string;
   territory_postcode: string;
   course_token?: string;
+  /** Client-generated UUID, reused across retries so the backend can dedupe. */
+  submission_id?: string;
   booker_reference?: string;
   attendee_name: string;
   attendee_email?: string;
@@ -43,9 +45,13 @@ export interface SubmitPayload {
 
 export type AppStep = 'intro' | 'declaration' | 'success';
 
+/** How a lookup/submit call failed: fetch threw (network) vs the server said no. */
+export type FailureKind = 'network' | 'server';
+
 export type CourseResolutionState =
   | { status: 'idle' }
   | { status: 'loading' }
   | { status: 'locked'; course: CourseCard }
   | { status: 'pick'; courses: CourseCard[] }
-  | { status: 'none' };
+  | { status: 'none' }
+  | { status: 'error'; kind: FailureKind; message: string };

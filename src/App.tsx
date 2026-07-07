@@ -18,21 +18,26 @@ export default function App() {
   // Postcode for the no-course fallback path; pre-filled from legacy ?postcode= QR param.
   const [manualPostcode, setManualPostcode] = useState<string>(() => readQueryParam('postcode'));
   const [courseState, setCourseState] = useState<CourseResolutionState>({ status: 'idle' });
+  // Short reference returned by submit-medical-declaration, shown on the success page.
+  const [successReference, setSuccessReference] = useState<string | null>(null);
 
   // When a course is locked, derive territory_postcode from its venue; else use manually entered value.
   const lockedCourse = courseState.status === 'locked' ? courseState.course : undefined;
   const territoryPostcode = lockedCourse ? lockedCourse.venue_postcode : manualPostcode;
 
-  // On mount: attempt course resolution from query params.
-  useEffect(() => {
+  // Resolve the course from the `course` booking-token param, or the current
+  // instructor number. Used on mount AND by the Retry button after a failure.
+  function resolveCourse() {
     const courseToken = readQueryParam('course');
-    const instructor = readQueryParam('instructor');
+    const instructor = instructorNumber.trim() || readQueryParam('instructor');
 
     if (courseToken) {
       // Highest-priority: legacy `course` booking-token param.
       setCourseState({ status: 'loading' });
-      lookupCourses({ booking_token: courseToken }).then((result) => {
-        if (result.ok && result.courses.length > 0) {
+      void lookupCourses({ booking_token: courseToken }).then((result) => {
+        if (!result.ok) {
+          setCourseState({ status: 'error', kind: result.kind, message: result.message });
+        } else if (result.courses.length > 0) {
           setCourseState({ status: 'locked', course: result.courses[0] });
         } else {
           setCourseState({ status: 'none' });
@@ -41,8 +46,10 @@ export default function App() {
     } else if (instructor) {
       // New QR: instructor number only.
       setCourseState({ status: 'loading' });
-      lookupCourses({ instructor_number: instructor }).then((result) => {
-        if (!result.ok || result.courses.length === 0) {
+      void lookupCourses({ instructor_number: instructor }).then((result) => {
+        if (!result.ok) {
+          setCourseState({ status: 'error', kind: result.kind, message: result.message });
+        } else if (result.courses.length === 0) {
           setCourseState({ status: 'none' });
         } else if (result.courses.length === 1) {
           setCourseState({ status: 'locked', course: result.courses[0] });
@@ -53,6 +60,12 @@ export default function App() {
     } else {
       setCourseState({ status: 'none' });
     }
+  }
+
+  // On mount: attempt course resolution from query params.
+  useEffect(() => {
+    resolveCourse();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // run once on mount
 
   function handleCourseSelected(course: CourseCard) {
@@ -77,6 +90,7 @@ export default function App() {
           onCourseSelected={handleCourseSelected}
           onCourseReset={handleResetCourse}
           onCourseStateChange={setCourseState}
+          onRetryLookup={resolveCourse}
           onStart={() => setStep('declaration')}
         />
       )}
@@ -86,11 +100,14 @@ export default function App() {
           territoryPostcode={territoryPostcode}
           courseToken={lockedCourse?.booking_token}
           lockedCourse={lockedCourse}
-          onSuccess={() => setStep('success')}
+          onSuccess={(reference) => {
+            setSuccessReference(reference ?? null);
+            setStep('success');
+          }}
           onBack={() => setStep('intro')}
         />
       )}
-      {step === 'success' && <SuccessPage />}
+      {step === 'success' && <SuccessPage reference={successReference} />}
     </div>
   );
 }

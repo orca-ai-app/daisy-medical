@@ -11,6 +11,7 @@ interface Props {
   onCourseSelected: (course: CourseCard) => void;
   onCourseReset: () => void;
   onCourseStateChange: (state: CourseResolutionState) => void;
+  onRetryLookup: () => void;
   onStart: () => void;
 }
 
@@ -97,11 +98,13 @@ export function IntroPage({
   onCourseSelected,
   onCourseReset,
   onCourseStateChange,
+  onRetryLookup,
   onStart,
 }: Props) {
   const courseResolved = courseState.status === 'locked';
   const showPicker = courseState.status === 'pick';
   const courseNone = courseState.status === 'none';
+  const courseFailed = courseState.status === 'error';
 
   // Show the "no class found" message only when: lookup is done, number was entered, and nothing resolved.
   const showNoneMessage = courseNone && instructorNumber.trim().length > 0;
@@ -109,15 +112,19 @@ export function IntroPage({
   // Postcode is required in the no-course path if the user has entered an instructor number.
   const postcodeRequired = !courseResolved && instructorNumber.trim().length > 0;
 
+  // A failed lookup falls back to the same manual-postcode path as "no course
+  // found" — parents shouldn't be stranded because the lookup service is down.
+  const courseFallback = courseNone || courseFailed;
+
   const canStart =
     courseState.status === 'loading' || showPicker
       ? false
       : courseResolved ||
-        (courseNone &&
+        (courseFallback &&
           instructorNumber.trim().length > 0 &&
           manualPostcode.trim().length > 0) ||
         // Edge case: no instructor entered but legacy postcode param present.
-        (courseNone &&
+        (courseFallback &&
           instructorNumber.trim().length === 0 &&
           manualPostcode.trim().length > 0);
 
@@ -127,7 +134,7 @@ export function IntroPage({
     onCourseStateChange({ status: 'loading' });
     const result = await lookupCourses({ instructor_number: trimmed });
     if (!result.ok) {
-      onCourseStateChange({ status: 'none' });
+      onCourseStateChange({ status: 'error', kind: result.kind, message: result.message });
       return;
     }
     if (result.courses.length === 0) {
@@ -178,8 +185,37 @@ export function IntroPage({
 
       {/* Course resolution: loading */}
       {courseState.status === 'loading' && (
-        <div className="mb-6 rounded-lg border border-[#D4E1E9] bg-white px-4 py-3 text-sm text-[#5A7A8F]">
+        <div
+          role="status"
+          aria-live="polite"
+          className="mb-6 flex items-center gap-3 rounded-lg border border-[#D4E1E9] bg-white px-4 py-3 text-sm text-[#5A7A8F]"
+        >
+          <span
+            aria-hidden="true"
+            className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-[#D4E1E9] border-t-[#006FAC]"
+          />
           Looking up your class&hellip;
+        </div>
+      )}
+
+      {/* Course resolution failed (network or server) — distinct from "no class today" */}
+      {courseFailed && (
+        <div
+          role="alert"
+          className="mb-6 rounded-lg border border-[#DF542F] bg-[#FDF3F0] px-4 py-3"
+        >
+          <p className="text-sm text-[#1A4359]">
+            {courseState.kind === 'network'
+              ? "We couldn't connect to look up your class. Check your internet connection and try again."
+              : courseState.message}
+          </p>
+          <button
+            type="button"
+            onClick={onRetryLookup}
+            className="mt-3 min-h-11 rounded-lg border-2 border-[#006FAC] px-4 py-2 text-sm font-semibold text-[#006FAC] hover:bg-[#EDF5FA]"
+          >
+            Try again
+          </button>
         </div>
       )}
 

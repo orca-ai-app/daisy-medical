@@ -10,7 +10,7 @@ interface Props {
   territoryPostcode: string;
   courseToken?: string;
   lockedCourse?: CourseCard;
-  onSuccess: () => void;
+  onSuccess: (reference?: string) => void;
   onBack: () => void;
 }
 
@@ -172,6 +172,9 @@ export function DeclarationPage({
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // One id per form session, reused on every retry so the backend can dedupe
+  // if an earlier attempt actually landed.
+  const [submissionId] = useState<string>(() => crypto.randomUUID());
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -189,14 +192,21 @@ export function DeclarationPage({
     setErrorMessage(null);
     setSubmitting(true);
 
-    const payload = buildSubmitPayload(form, instructorNumber, territoryPostcode, courseToken);
+    const payload = buildSubmitPayload(
+      form,
+      instructorNumber,
+      territoryPostcode,
+      courseToken,
+      submissionId,
+    );
     const result = await submitDeclaration(payload);
 
     setSubmitting(false);
 
     if (result.ok) {
-      onSuccess();
+      onSuccess(result.reference);
     } else {
+      // Form state is left untouched — everything entered survives a retry.
       setErrorMessage(result.message);
     }
   }
@@ -448,7 +458,17 @@ export function DeclarationPage({
           disabled={!canSubmit}
           className="w-full rounded-lg bg-[#006FAC] px-6 py-4 text-lg font-semibold text-white shadow-[0_6px_20px_rgba(0,60,100,0.10)] transition-opacity disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.98]"
         >
-          {submitting ? 'Submitting...' : 'Submit declaration'}
+          {submitting ? (
+            <span className="inline-flex items-center justify-center gap-2.5">
+              <span
+                aria-hidden="true"
+                className="h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-white"
+              />
+              Submitting&hellip;
+            </span>
+          ) : (
+            'Submit declaration'
+          )}
         </button>
 
         {!form.consentGiven && (
