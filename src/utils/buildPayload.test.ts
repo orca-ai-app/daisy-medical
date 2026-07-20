@@ -16,10 +16,33 @@ const baseForm: FormState = {
   conditions: new Set(['none']),
   propertyDisclaimerAcknowledged: true,
   specialRequirementsAdvised: 'not_applicable',
+  specialRequirementsDetail: '',
   emailOptIn: false,
   age16PlusConfirmed: true,
   consentGiven: true,
 };
+
+describe('special_requirements_detail', () => {
+  it('includes trimmed detail when advised is yes and text present', () => {
+    const data = buildDeclarationPayload({
+      ...baseForm,
+      specialRequirementsAdvised: 'yes',
+      specialRequirementsDetail: '  Wheelchair access needed  ',
+    });
+    expect(data.special_requirements_detail).toBe('Wheelchair access needed');
+  });
+
+  it('omits detail when not applicable or empty', () => {
+    expect(buildDeclarationPayload(baseForm).special_requirements_detail).toBeUndefined();
+    expect(
+      buildDeclarationPayload({
+        ...baseForm,
+        specialRequirementsAdvised: 'yes',
+        specialRequirementsDetail: '   ',
+      }).special_requirements_detail,
+    ).toBeUndefined();
+  });
+});
 
 /** A minimal CourseCard with franchisee_name for testing. */
 const makeCourseCard = (overrides: Partial<CourseCard> = {}): CourseCard => ({

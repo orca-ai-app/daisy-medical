@@ -242,7 +242,7 @@ export function IntroPage({
           This helps them keep everyone safe and provide any reasonable adjustments needed.
         </p>
         <p className="mt-3 text-sm text-[#5A7A8F]">
-          This form takes about two minutes to complete. Your information is stored securely and
+          This form takes about one minute to complete. Your information is stored securely and
           used only to support the safe running of your course.
         </p>
       </div>

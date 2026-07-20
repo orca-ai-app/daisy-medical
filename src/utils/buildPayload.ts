@@ -13,6 +13,7 @@ export interface FormState {
   conditions: Set<MedicalConditionKey>;
   propertyDisclaimerAcknowledged: boolean;
   specialRequirementsAdvised: SpecialRequirementsChoice | null;
+  specialRequirementsDetail: string;
   emailOptIn: boolean;
   age16PlusConfirmed: boolean;
   consentGiven: boolean;
@@ -26,6 +27,9 @@ export function buildDeclarationPayload(form: FormState): DeclarationData {
     conditions: Array.from(form.conditions),
     property_disclaimer_acknowledged: true,
     special_requirements_advised: form.specialRequirementsAdvised as SpecialRequirementsChoice,
+    ...(form.specialRequirementsAdvised === 'yes' && form.specialRequirementsDetail.trim()
+      ? { special_requirements_detail: form.specialRequirementsDetail.trim().slice(0, 500) }
+      : {}),
     age_16_plus_confirmed: true,
     gdpr_terms_agreed: true,
   };

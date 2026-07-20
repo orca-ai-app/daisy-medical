@@ -22,6 +22,7 @@ const INITIAL_FORM: FormState = {
   conditions: new Set(),
   propertyDisclaimerAcknowledged: false,
   specialRequirementsAdvised: null,
+  specialRequirementsDetail: '',
   emailOptIn: false,
   age16PlusConfirmed: false,
   consentGiven: false,
@@ -389,6 +390,24 @@ export function DeclarationPage({
             ]}
             onChange={(v) => set('specialRequirementsAdvised', v)}
           />
+          {form.specialRequirementsAdvised === 'yes' && (
+            <div className="mt-3">
+              <label
+                htmlFor="special-requirements-detail"
+                className="mb-1 block text-sm font-medium text-[#1A4359]"
+              >
+                Please tell us about your requirements
+              </label>
+              <textarea
+                id="special-requirements-detail"
+                rows={3}
+                maxLength={500}
+                value={form.specialRequirementsDetail}
+                onChange={(e) => set('specialRequirementsDetail', e.target.value)}
+                className="w-full rounded-xl border border-[#D4E8F5] px-4 py-3 text-[16px] text-[#1A4359] focus:ring-2 focus:ring-[#D4E8F5] focus:outline-none"
+              />
+            </div>
+          )}
         </SectionCard>
 
         {/* 7. Email opt-in */}
@@ -398,7 +417,7 @@ export function DeclarationPage({
             checked={form.emailOptIn}
             onChange={(v) => set('emailOptIn', v)}
           >
-            I&apos;d like to get emails packed full of useful content to help me.
+            I&apos;d like to receive emails with useful content to help and remind me.
           </CheckboxRow>
         </SectionCard>
 
