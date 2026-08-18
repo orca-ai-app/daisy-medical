@@ -21,9 +21,11 @@ export default function App() {
   // Short reference returned by submit-medical-declaration, shown on the success page.
   const [successReference, setSuccessReference] = useState<string | null>(null);
 
-  // When a course is locked, derive territory_postcode from its venue; else use manually entered value.
+  // When a course is locked, derive territory_postcode from its venue; fall back to the
+  // manually entered value when there is no locked course OR the course has no venue
+  // postcode (private classes — venue_postcode is nullable).
   const lockedCourse = courseState.status === 'locked' ? courseState.course : undefined;
-  const territoryPostcode = lockedCourse ? lockedCourse.venue_postcode : manualPostcode;
+  const territoryPostcode = lockedCourse?.venue_postcode ?? manualPostcode;
 
   // Resolve the course from the `course` booking-token param, or the current
   // instructor number. Used on mount AND by the Retry button after a failure.
@@ -94,18 +96,22 @@ export default function App() {
           onStart={() => setStep('declaration')}
         />
       )}
-      {step === 'declaration' && (
-        <DeclarationPage
-          instructorNumber={instructorNumber}
-          territoryPostcode={territoryPostcode}
-          courseToken={lockedCourse?.booking_token}
-          lockedCourse={lockedCourse}
-          onSuccess={(reference) => {
-            setSuccessReference(reference ?? null);
-            setStep('success');
-          }}
-          onBack={() => setStep('intro')}
-        />
+      {/* Kept mounted (CSS-hidden) on the intro step so entered answers and the
+          submissionId survive intro ↔ declaration navigation within a session. */}
+      {step !== 'success' && (
+        <div className={step === 'declaration' ? undefined : 'hidden'}>
+          <DeclarationPage
+            instructorNumber={instructorNumber}
+            territoryPostcode={territoryPostcode}
+            courseToken={lockedCourse?.booking_token}
+            lockedCourse={lockedCourse}
+            onSuccess={(reference) => {
+              setSuccessReference(reference ?? null);
+              setStep('success');
+            }}
+            onBack={() => setStep('intro')}
+          />
+        </div>
       )}
       {step === 'success' && <SuccessPage reference={successReference} />}
     </div>

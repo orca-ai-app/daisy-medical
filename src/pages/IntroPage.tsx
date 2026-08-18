@@ -109,24 +109,28 @@ export function IntroPage({
   // Show the "no class found" message only when: lookup is done, number was entered, and nothing resolved.
   const showNoneMessage = courseNone && instructorNumber.trim().length > 0;
 
-  // Postcode is required in the no-course path if the user has entered an instructor number.
-  const postcodeRequired = !courseResolved && instructorNumber.trim().length > 0;
+  // A locked private class may have no venue postcode — the attendee supplies one manually.
+  const lockedCourseNeedsPostcode = courseResolved && !courseState.course.venue_postcode;
+
+  // Postcode is required in the no-course fallback path, and for a locked course
+  // without a venue postcode.
+  const postcodeRequired = !courseResolved || lockedCourseNeedsPostcode;
 
   // A failed lookup falls back to the same manual-postcode path as "no course
   // found" — parents shouldn't be stranded because the lookup service is down.
   const courseFallback = courseNone || courseFailed;
 
+  // A resolved course can proceed without an instructor number (the server derives
+  // the franchisee from the course token); otherwise both the instructor number and
+  // a postcode are required — a submit without either would be rejected server-side.
   const canStart =
     courseState.status === 'loading' || showPicker
       ? false
-      : courseResolved ||
-        (courseFallback &&
+      : courseResolved
+        ? !lockedCourseNeedsPostcode || manualPostcode.trim().length > 0
+        : courseFallback &&
           instructorNumber.trim().length > 0 &&
-          manualPostcode.trim().length > 0) ||
-        // Edge case: no instructor entered but legacy postcode param present.
-        (courseFallback &&
-          instructorNumber.trim().length === 0 &&
-          manualPostcode.trim().length > 0);
+          manualPostcode.trim().length > 0;
 
   async function runLookup(number: string) {
     const trimmed = number.trim();
@@ -257,6 +261,7 @@ export function IntroPage({
               className="mb-1.5 block text-sm font-medium text-[#1A4359]"
             >
               Your instructor&apos;s number
+              <span className="ml-1 text-[#DF542F]">*</span>
             </label>
             <input
               id="instructor-number"
@@ -271,7 +276,7 @@ export function IntroPage({
               className="w-full rounded-lg border border-[#D4E1E9] bg-white px-4 py-3 text-lg text-[#1A4359] placeholder-[#5A7A8F] focus:border-[#006FAC] focus:outline-none focus:ring-2 focus:ring-[#D4E8F5]"
             />
             <p className="mt-1 text-xs text-[#5A7A8F]">
-              Your trainer will tell you this — e.g. 42
+              Ask your trainer for their instructor number — e.g. 42
             </p>
 
             {/* No-class-found inline message */}
@@ -284,15 +289,16 @@ export function IntroPage({
           </div>
         )}
 
-        {/* Postcode — shown only when no course resolved (generic fallback) */}
-        {!courseResolved && (
+        {/* Postcode — shown when no course resolved (generic fallback), or when the
+            locked course has no venue postcode (private classes) */}
+        {postcodeRequired && (
           <div>
             <label
               htmlFor="postcode"
               className="mb-1.5 block text-sm font-medium text-[#1A4359]"
             >
               Postcode area
-              {postcodeRequired && <span className="ml-1 text-[#DF542F]">*</span>}
+              <span className="ml-1 text-[#DF542F]">*</span>
             </label>
             <input
               id="postcode"

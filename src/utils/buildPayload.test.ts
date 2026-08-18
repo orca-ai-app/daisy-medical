@@ -3,6 +3,7 @@ import {
   buildDeclarationPayload,
   buildSubmitPayload,
   canSubmitForm,
+  isValidEmail,
   toggleCondition,
 } from './buildPayload';
 import type { FormState } from './buildPayload';
@@ -166,6 +167,22 @@ describe('buildSubmitPayload', () => {
     expect(result.attendee_name).toBe('Jane');
   });
 
+  it('omits instructor_number when blank (token-only path — server derives the franchisee)', () => {
+    const result = buildSubmitPayload(baseForm, '', 'SW1', 'tok_abc');
+    expect(result.instructor_number).toBeUndefined();
+    expect(result.course_token).toBe('tok_abc');
+  });
+
+  it('omits instructor_number when whitespace only', () => {
+    const result = buildSubmitPayload(baseForm, '   ', 'SW1', 'tok_abc');
+    expect(result.instructor_number).toBeUndefined();
+  });
+
+  it('trims whitespace from instructor_number', () => {
+    const result = buildSubmitPayload(baseForm, '  JEN1  ', 'SW1');
+    expect(result.instructor_number).toBe('JEN1');
+  });
+
   // ── Instructor-number → resolved course → venue-derived postcode ──────────
 
   it('accepts venue_postcode derived from a resolved course as territory_postcode', () => {
@@ -245,6 +262,45 @@ describe('canSubmitForm', () => {
 
   it('returns true when email_opt_in is false and email is empty', () => {
     expect(canSubmitForm({ ...baseForm, emailOptIn: false, attendeeEmail: '' })).toBe(true);
+  });
+
+  it('returns false when a non-empty email is malformed (no opt-in)', () => {
+    expect(canSubmitForm({ ...baseForm, attendeeEmail: 'sarah.gmail.com' })).toBe(false);
+  });
+
+  it('returns false when email_opt_in is true and email is malformed', () => {
+    expect(
+      canSubmitForm({ ...baseForm, emailOptIn: true, attendeeEmail: 'sarah.gmail.com' }),
+    ).toBe(false);
+  });
+
+  it('returns true when a non-empty email is well formed (no opt-in)', () => {
+    expect(canSubmitForm({ ...baseForm, attendeeEmail: 'sarah@gmail.com' })).toBe(true);
+  });
+});
+
+// ─── isValidEmail ───────────────────────────────────────────────────────────
+
+describe('isValidEmail', () => {
+  it('accepts a plain something@something.something address', () => {
+    expect(isValidEmail('jane@example.com')).toBe(true);
+    expect(isValidEmail('jane.smith+daisy@sub.example.co.uk')).toBe(true);
+  });
+
+  it('accepts an address padded with whitespace (form trims before submit)', () => {
+    expect(isValidEmail('  jane@example.com  ')).toBe(true);
+  });
+
+  it('rejects addresses missing an @ or a dot in the domain', () => {
+    expect(isValidEmail('sarah.gmail.com')).toBe(false);
+    expect(isValidEmail('sarah@gmailcom')).toBe(false);
+    expect(isValidEmail('sarah@')).toBe(false);
+    expect(isValidEmail('@example.com')).toBe(false);
+    expect(isValidEmail('')).toBe(false);
+  });
+
+  it('rejects addresses containing internal whitespace', () => {
+    expect(isValidEmail('sarah smith@example.com')).toBe(false);
   });
 });
 
@@ -343,6 +399,17 @@ describe('instructor-number resolution state → postcode handling', () => {
     const result = buildSubmitPayload(baseForm, 'NOPE', manualPostcode);
     expect(result.territory_postcode).toBe('BS1');
     expect(result.course_token).toBeUndefined();
+  });
+
+  it('falls back to the manual postcode when the locked course has no venue_postcode', () => {
+    // Private classes (migration 040) can have venue_postcode null; App derives
+    // territoryPostcode = lockedCourse?.venue_postcode ?? manualPostcode.
+    const course = makeCourseCard({ venue_postcode: null });
+    const manualPostcode = 'SW1';
+    const territoryPostcode = course.venue_postcode ?? manualPostcode;
+    const result = buildSubmitPayload(baseForm, 'JEN1', territoryPostcode, course.booking_token);
+    expect(result.territory_postcode).toBe('SW1');
+    expect(result.course_token).toBe('tok_abc');
   });
 
   it('legacy ?postcode= param pre-fills the postcode field when no course resolves', () => {

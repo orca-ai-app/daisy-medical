@@ -46,7 +46,6 @@ export function buildSubmitPayload(
   submissionId?: string,
 ): SubmitPayload {
   const payload: SubmitPayload = {
-    instructor_number: instructorNumber,
     territory_postcode: territoryPostcode,
     attendee_name: form.attendeeName.trim(),
     email_opt_in: form.emailOptIn,
@@ -54,6 +53,13 @@ export function buildSubmitPayload(
     consent_given: true,
     declaration_data: buildDeclarationPayload(form),
   };
+
+  // Omitted when blank (token-only path) — the server derives the franchisee
+  // from the course row when a valid course_token is supplied.
+  const instructor = instructorNumber.trim();
+  if (instructor) {
+    payload.instructor_number = instructor;
+  }
 
   if (courseToken) {
     payload.course_token = courseToken;
@@ -79,6 +85,14 @@ export function buildSubmitPayload(
 }
 
 /**
+ * Loose email shape check — something@something.something. Deliberately not a
+ * full RFC parse; it exists to catch typos like "sarah.gmail.com".
+ */
+export function isValidEmail(email: string): boolean {
+  return /^\S+@\S+\.\S+$/.test(email.trim());
+}
+
+/**
  * Returns true only when all required fields are valid and the form can be submitted.
  *
  * Rules:
@@ -90,6 +104,7 @@ export function buildSubmitPayload(
  * - age 16+ confirmed
  * - consent (GDPR) given
  * - if email_opt_in is true, attendee_email must be non-empty
+ * - any non-empty attendee_email must look like an email address
  */
 export function canSubmitForm(form: FormState): boolean {
   if (form.attendeeName.trim().length === 0) return false;
@@ -99,7 +114,9 @@ export function canSubmitForm(form: FormState): boolean {
   if (form.specialRequirementsAdvised === null) return false;
   if (!form.age16PlusConfirmed) return false;
   if (!form.consentGiven) return false;
-  if (form.emailOptIn && form.attendeeEmail.trim().length === 0) return false;
+  const email = form.attendeeEmail.trim();
+  if (form.emailOptIn && email.length === 0) return false;
+  if (email.length > 0 && !isValidEmail(email)) return false;
   return true;
 }
 

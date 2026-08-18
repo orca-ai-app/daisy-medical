@@ -6,7 +6,8 @@ export interface CourseCard {
   start_time: string;
   end_time: string;
   venue_name: string;
-  venue_postcode: string;
+  /** Null for private classes without a fixed venue (platform migration 040). */
+  venue_postcode: string | null;
   franchisee_name: string | null;
 }
 
@@ -31,7 +32,8 @@ export interface DeclarationData {
 }
 
 export interface SubmitPayload {
-  instructor_number: string;
+  /** Omitted on the token-only path — the server derives the franchisee from the course row. */
+  instructor_number?: string;
   territory_postcode: string;
   course_token?: string;
   /** Client-generated UUID, reused across retries so the backend can dedupe. */

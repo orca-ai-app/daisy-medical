@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type React from 'react';
 import type { CourseCard, MedicalConditionKey, SpecialRequirementsChoice } from '../types';
 import { submitDeclaration } from '../api';
-import { buildSubmitPayload, canSubmitForm, toggleCondition } from '../utils/buildPayload';
+import { buildSubmitPayload, canSubmitForm, isValidEmail, toggleCondition } from '../utils/buildPayload';
 import type { FormState } from '../utils/buildPayload';
 
 interface Props {
@@ -295,6 +295,11 @@ export function DeclarationPage({
                 placeholder="your@email.com"
                 required={form.emailOptIn}
               />
+              {form.attendeeEmail.trim().length > 0 && !isValidEmail(form.attendeeEmail) && (
+                <p role="alert" className="mt-1.5 text-sm text-[#DF542F]">
+                  Please enter a valid email address, e.g. your@email.com
+                </p>
+              )}
             </div>
           </div>
         </SectionCard>
