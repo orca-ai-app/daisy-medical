@@ -1,4 +1,5 @@
 import type React from 'react';
+import { useEffect, useRef } from 'react';
 import type { CourseCard, CourseResolutionState } from '../types';
 import { lookupCourses } from '../api';
 
@@ -150,10 +151,33 @@ export function IntroPage({
     }
   }
 
+  // Look the class up as soon as the number looks complete (franchisee numbers
+  // are four digits), after a short pause. The old trigger was the field losing
+  // focus, which on a phone is exactly the moment the user taps into the
+  // postcode box: the class resolved and the postcode box vanished from under
+  // their thumb (Julie, 25 Sep 2026).
+  const lookupTimer = useRef<number | null>(null);
+  useEffect(() => {
+    if (lookupTimer.current) window.clearTimeout(lookupTimer.current);
+    const trimmed = instructorNumber.trim();
+    if (!/^\d{4}$/.test(trimmed)) return;
+    if (courseState.status === 'locked' || courseState.status === 'loading') return;
+    lookupTimer.current = window.setTimeout(() => {
+      void runLookup(trimmed);
+    }, 400);
+    return () => {
+      if (lookupTimer.current) window.clearTimeout(lookupTimer.current);
+    };
+    // Only the typed number should retrigger; courseState is read, not watched.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [instructorNumber]);
+
   function handleInstructorBlur() {
-    // Trigger lookup when the user leaves the field and the course hasn't been resolved yet.
-    if (instructorNumber.trim() && courseState.status !== 'locked') {
-      void runLookup(instructorNumber);
+    // Fallback for numbers that are not four digits (legacy short codes): look
+    // up on leaving the field. Four-digit numbers have already resolved above.
+    const trimmed = instructorNumber.trim();
+    if (trimmed && !/^\d{4}$/.test(trimmed) && courseState.status !== 'locked') {
+      void runLookup(trimmed);
     }
   }
 

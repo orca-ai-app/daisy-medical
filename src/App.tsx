@@ -80,6 +80,29 @@ export default function App() {
     setManualPostcode('');
   }
 
+  // Keep the phone's back gesture inside the app. Without a history entry per
+  // step, Back left the page entirely and everything typed was lost (Julie,
+  // 25 Sep 2026). The declaration stays mounted on the intro step, so going
+  // back keeps the answers.
+  useEffect(() => {
+    const onPop = () => setStep((s) => (s === 'declaration' ? 'intro' : s));
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  function goToDeclaration() {
+    window.history.pushState({ step: 'declaration' }, '');
+    setStep('declaration');
+  }
+
+  function goBackToIntro() {
+    if (window.history.state?.step === 'declaration') {
+      window.history.back(); // popstate handler moves the step
+    } else {
+      setStep('intro');
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#F5F9FB] font-sans">
       {step === 'intro' && (
@@ -93,7 +116,7 @@ export default function App() {
           onCourseReset={handleResetCourse}
           onCourseStateChange={setCourseState}
           onRetryLookup={resolveCourse}
-          onStart={() => setStep('declaration')}
+          onStart={goToDeclaration}
         />
       )}
       {/* Kept mounted (CSS-hidden) on the intro step so entered answers and the
@@ -109,7 +132,7 @@ export default function App() {
               setSuccessReference(reference ?? null);
               setStep('success');
             }}
-            onBack={() => setStep('intro')}
+            onBack={goBackToIntro}
           />
         </div>
       )}

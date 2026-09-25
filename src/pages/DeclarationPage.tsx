@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type React from 'react';
 import type { CourseCard, MedicalConditionKey, SpecialRequirementsChoice } from '../types';
 import { submitDeclaration } from '../api';
@@ -27,6 +27,40 @@ const INITIAL_FORM: FormState = {
   age16PlusConfirmed: false,
   consentGiven: false,
 };
+
+// Draft answers survive a reload or an accidental swipe out of the page for
+// the life of the tab (sessionStorage only, never localStorage: these are
+// health answers). Cleared the moment the declaration is submitted.
+const DRAFT_KEY = 'daisy-medical-draft';
+
+function loadDraft(): FormState {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY);
+    if (!raw) return INITIAL_FORM;
+    const saved = JSON.parse(raw) as Partial<Omit<FormState, 'conditions'>> & {
+      conditions?: MedicalConditionKey[];
+    };
+    return { ...INITIAL_FORM, ...saved, conditions: new Set(saved.conditions ?? []) };
+  } catch {
+    return INITIAL_FORM;
+  }
+}
+
+function saveDraft(form: FormState) {
+  try {
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ ...form, conditions: [...form.conditions] }));
+  } catch {
+    /* storage unavailable (private mode etc.): the form still works for this visit */
+  }
+}
+
+function clearDraft() {
+  try {
+    sessionStorage.removeItem(DRAFT_KEY);
+  } catch {
+    /* ignore */
+  }
+}
 
 const CONDITION_OPTIONS: { key: MedicalConditionKey; label: string }[] = [
   { key: 'back_neck_arm_knee', label: 'Back/Neck/Arm/Knee problems' },
@@ -170,7 +204,10 @@ export function DeclarationPage({
   onSuccess,
   onBack,
 }: Props) {
-  const [form, setForm] = useState<FormState>(INITIAL_FORM);
+  const [form, setForm] = useState<FormState>(loadDraft);
+  useEffect(() => {
+    saveDraft(form);
+  }, [form]);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   // One id per form session, reused on every retry so the backend can dedupe
@@ -205,6 +242,7 @@ export function DeclarationPage({
     setSubmitting(false);
 
     if (result.ok) {
+      clearDraft();
       onSuccess(result.reference);
     } else {
       // Form state is left untouched — everything entered survives a retry.
