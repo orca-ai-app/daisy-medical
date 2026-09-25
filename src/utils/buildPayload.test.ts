@@ -189,7 +189,7 @@ describe('buildSubmitPayload', () => {
     // App derives territoryPostcode = lockedCourse.venue_postcode when a course is resolved.
     // This test verifies buildSubmitPayload forwards that derived value correctly.
     const course = makeCourseCard({ venue_postcode: 'SW1A 1AA' });
-    const result = buildSubmitPayload(baseForm, 'JEN1', course.venue_postcode, course.booking_token);
+    const result = buildSubmitPayload(baseForm, 'JEN1', course.venue_postcode!, course.booking_token);
     expect(result.territory_postcode).toBe('SW1A 1AA');
     expect(result.course_token).toBe('tok_abc');
   });
@@ -360,7 +360,7 @@ describe('CourseCard franchisee_name field', () => {
   it('payload built from a resolved course contains the venue-derived territory_postcode', () => {
     const card = makeCourseCard({ venue_postcode: 'EX1 1AA', franchisee_name: 'Jenni Dunman' });
     // Simulate App: territoryPostcode = lockedCourse.venue_postcode
-    const derived = card.venue_postcode;
+    const derived = card.venue_postcode!;
     const result = buildSubmitPayload(baseForm, 'JEN1', derived, card.booking_token);
     expect(result.territory_postcode).toBe('EX1 1AA');
   });
@@ -386,7 +386,7 @@ describe('instructor-number resolution state → postcode handling', () => {
     // Simulate the user picking from a list.
     const picked = makeCourseCard({ venue_postcode: 'OX1 3BQ', template_name: 'Paediatric' });
     // App state after pick: lockedCourse = picked, territoryPostcode = picked.venue_postcode
-    const territoryPostcode = picked.venue_postcode;
+    const territoryPostcode = picked.venue_postcode!;
     const result = buildSubmitPayload(baseForm, 'JEN1', territoryPostcode, picked.booking_token);
     expect(result.territory_postcode).toBe('OX1 3BQ');
     expect(result.course_token).toBe('tok_abc');
