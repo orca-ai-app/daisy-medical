@@ -15,7 +15,6 @@ export interface FormState {
   specialRequirementsAdvised: SpecialRequirementsChoice | null;
   specialRequirementsDetail: string;
   emailOptIn: boolean;
-  age16PlusConfirmed: boolean;
   consentGiven: boolean;
 }
 
@@ -30,7 +29,6 @@ export function buildDeclarationPayload(form: FormState): DeclarationData {
     ...(form.specialRequirementsAdvised === 'yes' && form.specialRequirementsDetail.trim()
       ? { special_requirements_detail: form.specialRequirementsDetail.trim().slice(0, 500) }
       : {}),
-    age_16_plus_confirmed: true,
     gdpr_terms_agreed: true,
   };
 }
@@ -101,7 +99,6 @@ export function isValidEmail(email: string): boolean {
  * - at least one condition checked (the checkbox group counts 'none' as a valid selection)
  * - property disclaimer acknowledged
  * - special requirements choice made
- * - age 16+ confirmed
  * - consent (GDPR) given
  * - if email_opt_in is true, attendee_email must be non-empty
  * - any non-empty attendee_email must look like an email address
@@ -112,7 +109,6 @@ export function canSubmitForm(form: FormState): boolean {
   if (form.conditions.size === 0) return false;
   if (!form.propertyDisclaimerAcknowledged) return false;
   if (form.specialRequirementsAdvised === null) return false;
-  if (!form.age16PlusConfirmed) return false;
   if (!form.consentGiven) return false;
   const email = form.attendeeEmail.trim();
   if (form.emailOptIn && email.length === 0) return false;

@@ -27,7 +27,6 @@ export interface DeclarationData {
   special_requirements_advised: SpecialRequirementsChoice;
   /** Free text shown when the attendee answers 'yes' (M3 feedback §6). */
   special_requirements_detail?: string;
-  age_16_plus_confirmed: true;
   gdpr_terms_agreed: true;
 }
 

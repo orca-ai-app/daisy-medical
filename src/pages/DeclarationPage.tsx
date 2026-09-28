@@ -24,7 +24,6 @@ const INITIAL_FORM: FormState = {
   specialRequirementsAdvised: null,
   specialRequirementsDetail: '',
   emailOptIn: false,
-  age16PlusConfirmed: false,
   consentGiven: false,
 };
 
@@ -464,21 +463,7 @@ export function DeclarationPage({
           </CheckboxRow>
         </SectionCard>
 
-        {/* 8. Age confirmation */}
-        <SectionCard>
-          <CheckboxRow
-            id="age-16-plus"
-            checked={form.age16PlusConfirmed}
-            onChange={(v) => set('age16PlusConfirmed', v)}
-          >
-            <span>
-              I confirm that I am at least 16 years of age or older.
-              <span className="ml-1 text-[#DF542F]">*</span>
-            </span>
-          </CheckboxRow>
-        </SectionCard>
-
-        {/* 9. GDPR / storage consent */}
+        {/* 8. GDPR / storage consent (the age 16+ box was removed at Jenni's request, 28 Sep 2026: Level 3 classes admit 14+) */}
         <div className="rounded-lg border-2 border-[#006FAC] bg-[#EDF5FA] p-5">
           <h2 className="mb-3 font-display text-lg font-bold text-[#1A4359]">
             Consent to store health information

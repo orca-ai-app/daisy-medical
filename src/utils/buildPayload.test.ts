@@ -19,7 +19,6 @@ const baseForm: FormState = {
   specialRequirementsAdvised: 'not_applicable',
   specialRequirementsDetail: '',
   emailOptIn: false,
-  age16PlusConfirmed: true,
   consentGiven: true,
 };
 
@@ -80,7 +79,7 @@ describe('buildDeclarationPayload', () => {
   it('always stamps the literal true acknowledgement flags', () => {
     const result = buildDeclarationPayload(baseForm);
     expect(result.property_disclaimer_acknowledged).toBe(true);
-    expect(result.age_16_plus_confirmed).toBe(true);
+    expect(result).not.toHaveProperty('age_16_plus_confirmed');
     expect(result.gdpr_terms_agreed).toBe(true);
   });
 
@@ -240,10 +239,6 @@ describe('canSubmitForm', () => {
 
   it('returns false when special requirements choice not made', () => {
     expect(canSubmitForm({ ...baseForm, specialRequirementsAdvised: null })).toBe(false);
-  });
-
-  it('returns false when age 16+ not confirmed', () => {
-    expect(canSubmitForm({ ...baseForm, age16PlusConfirmed: false })).toBe(false);
   });
 
   it('returns false when GDPR consent not given', () => {
