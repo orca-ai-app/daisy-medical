@@ -41,6 +41,12 @@ export interface SubmitPayload {
   attendee_name: string;
   attendee_email?: string;
   email_opt_in: boolean;
+  /**
+   * "Email me about my certificate" (platform migration 065). Needs
+   * attendee_email; the address is shared with the trainer for certificate
+   * information about this class only, never marketing.
+   */
+  certificate_opt_in: boolean;
   photo_consent: boolean;
   consent_given: true;
   declaration_data: DeclarationData;

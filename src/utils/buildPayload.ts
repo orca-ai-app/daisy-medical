@@ -15,6 +15,8 @@ export interface FormState {
   specialRequirementsAdvised: SpecialRequirementsChoice | null;
   specialRequirementsDetail: string;
   emailOptIn: boolean;
+  /** "Email me about my certificate": optional, unticked by default (migration 065). */
+  certificateOptIn: boolean;
   consentGiven: boolean;
 }
 
@@ -47,6 +49,7 @@ export function buildSubmitPayload(
     territory_postcode: territoryPostcode,
     attendee_name: form.attendeeName.trim(),
     email_opt_in: form.emailOptIn,
+    certificate_opt_in: form.certificateOptIn,
     photo_consent: form.photoConsent === true,
     consent_given: true,
     declaration_data: buildDeclarationPayload(form),
@@ -90,6 +93,11 @@ export function isValidEmail(email: string): boolean {
   return /^\S+@\S+\.\S+$/.test(email.trim());
 }
 
+/** The email box becomes required once either email tick is on. */
+export function emailRequired(form: Pick<FormState, 'emailOptIn' | 'certificateOptIn'>): boolean {
+  return form.emailOptIn || form.certificateOptIn;
+}
+
 /**
  * Returns true only when all required fields are valid and the form can be submitted.
  *
@@ -100,7 +108,7 @@ export function isValidEmail(email: string): boolean {
  * - property disclaimer acknowledged
  * - special requirements choice made
  * - consent (GDPR) given
- * - if email_opt_in is true, attendee_email must be non-empty
+ * - if email_opt_in or certificate_opt_in is true, attendee_email must be non-empty
  * - any non-empty attendee_email must look like an email address
  */
 export function canSubmitForm(form: FormState): boolean {
@@ -111,7 +119,7 @@ export function canSubmitForm(form: FormState): boolean {
   if (form.specialRequirementsAdvised === null) return false;
   if (!form.consentGiven) return false;
   const email = form.attendeeEmail.trim();
-  if (form.emailOptIn && email.length === 0) return false;
+  if (emailRequired(form) && email.length === 0) return false;
   if (email.length > 0 && !isValidEmail(email)) return false;
   return true;
 }

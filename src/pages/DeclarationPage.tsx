@@ -2,7 +2,13 @@ import { useEffect, useState } from 'react';
 import type React from 'react';
 import type { CourseCard, MedicalConditionKey, SpecialRequirementsChoice } from '../types';
 import { submitDeclaration } from '../api';
-import { buildSubmitPayload, canSubmitForm, isValidEmail, toggleCondition } from '../utils/buildPayload';
+import {
+  buildSubmitPayload,
+  canSubmitForm,
+  emailRequired,
+  isValidEmail,
+  toggleCondition,
+} from '../utils/buildPayload';
 import type { FormState } from '../utils/buildPayload';
 
 interface Props {
@@ -24,6 +30,7 @@ const INITIAL_FORM: FormState = {
   specialRequirementsAdvised: null,
   specialRequirementsDetail: '',
   emailOptIn: false,
+  certificateOptIn: false,
   consentGiven: false,
 };
 
@@ -163,11 +170,13 @@ function CheckboxRow({
   id,
   checked,
   onChange,
+  describedBy,
   children,
 }: {
   id: string;
   checked: boolean;
   onChange: (v: boolean) => void;
+  describedBy?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -176,6 +185,7 @@ function CheckboxRow({
         id={id}
         type="checkbox"
         checked={checked}
+        aria-describedby={describedBy}
         onChange={(e) => onChange(e.target.checked)}
         className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer accent-[#006FAC]"
       />
@@ -317,10 +327,10 @@ export function DeclarationPage({
             <div>
               <FieldLabel
                 htmlFor="attendee-email"
-                required={form.emailOptIn}
+                required={emailRequired(form)}
               >
                 Email
-                {!form.emailOptIn && (
+                {!emailRequired(form) && (
                   <span className="ml-1 font-normal text-[#5A7A8F]">(optional)</span>
                 )}
               </FieldLabel>
@@ -330,11 +340,32 @@ export function DeclarationPage({
                 value={form.attendeeEmail}
                 onChange={(v) => set('attendeeEmail', v)}
                 placeholder="your@email.com"
-                required={form.emailOptIn}
+                required={emailRequired(form)}
               />
               {form.attendeeEmail.trim().length > 0 && !isValidEmail(form.attendeeEmail) && (
                 <p role="alert" className="mt-1.5 text-sm text-[#DF542F]">
                   Please enter a valid email address, e.g. your@email.com
+                </p>
+              )}
+            </div>
+
+            {/* Certificate opt-in (platform migration 065): optional, unticked by default. */}
+            <div>
+              <CheckboxRow
+                id="certificate-opt-in"
+                checked={form.certificateOptIn}
+                onChange={(v) => set('certificateOptIn', v)}
+                describedBy="certificate-opt-in-help"
+              >
+                Email me about my certificate
+              </CheckboxRow>
+              <p id="certificate-opt-in-help" className="mt-1.5 pl-8 text-xs text-[#5A7A8F]">
+                We&apos;ll use your email only to send certificate information for this class. It
+                is shared with your trainer for that purpose and never used for marketing.
+              </p>
+              {form.certificateOptIn && form.attendeeEmail.trim().length === 0 && (
+                <p className="mt-1.5 pl-8 text-sm text-[#DF542F]">
+                  Please add your email above so we can send it.
                 </p>
               )}
             </div>
@@ -474,6 +505,11 @@ export function DeclarationPage({
             store it securely and use it solely to support the safe running of your first aid
             course. It will not be shared with third parties or used for marketing. You may
             request deletion at any time by contacting your instructor.
+          </p>
+          <p className="mb-4 text-sm text-[#2D5570]">
+            If you tick &ldquo;Email me about my certificate&rdquo;, your email address (never your
+            health answers) is shared with your trainer only so they can send you certificate
+            information for this class.
           </p>
           <CheckboxRow
             id="consent-given"

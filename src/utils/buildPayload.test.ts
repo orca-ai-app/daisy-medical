@@ -3,6 +3,7 @@ import {
   buildDeclarationPayload,
   buildSubmitPayload,
   canSubmitForm,
+  emailRequired,
   isValidEmail,
   toggleCondition,
 } from './buildPayload';
@@ -19,6 +20,7 @@ const baseForm: FormState = {
   specialRequirementsAdvised: 'not_applicable',
   specialRequirementsDetail: '',
   emailOptIn: false,
+  certificateOptIn: false,
   consentGiven: true,
 };
 
@@ -271,6 +273,53 @@ describe('canSubmitForm', () => {
 
   it('returns true when a non-empty email is well formed (no opt-in)', () => {
     expect(canSubmitForm({ ...baseForm, attendeeEmail: 'sarah@gmail.com' })).toBe(true);
+  });
+});
+
+// ─── certificate opt-in (platform migration 065) ────────────────────────────
+
+describe('certificate opt-in', () => {
+  it('is unticked by default and sends false', () => {
+    expect(buildSubmitPayload(baseForm, 'JEN1', 'SW1').certificate_opt_in).toBe(false);
+  });
+
+  it('sends true with the email when ticked', () => {
+    const result = buildSubmitPayload(
+      { ...baseForm, certificateOptIn: true, attendeeEmail: ' jane@example.com ' },
+      'JEN1',
+      'SW1',
+    );
+    expect(result.certificate_opt_in).toBe(true);
+    expect(result.attendee_email).toBe('jane@example.com');
+  });
+
+  it('does not tick the marketing opt-in', () => {
+    const result = buildSubmitPayload(
+      { ...baseForm, certificateOptIn: true, attendeeEmail: 'jane@example.com' },
+      'JEN1',
+      'SW1',
+    );
+    expect(result.email_opt_in).toBe(false);
+  });
+
+  it('makes the email required once ticked', () => {
+    expect(emailRequired(baseForm)).toBe(false);
+    expect(emailRequired({ ...baseForm, certificateOptIn: true })).toBe(true);
+    expect(emailRequired({ ...baseForm, emailOptIn: true })).toBe(true);
+    expect(canSubmitForm({ ...baseForm, certificateOptIn: true, attendeeEmail: '' })).toBe(false);
+    expect(canSubmitForm({ ...baseForm, certificateOptIn: true, attendeeEmail: '   ' })).toBe(false);
+  });
+
+  it('rejects a malformed email when ticked', () => {
+    expect(
+      canSubmitForm({ ...baseForm, certificateOptIn: true, attendeeEmail: 'sarah.gmail.com' }),
+    ).toBe(false);
+  });
+
+  it('allows submit when ticked with a valid email', () => {
+    expect(
+      canSubmitForm({ ...baseForm, certificateOptIn: true, attendeeEmail: 'sarah@gmail.com' }),
+    ).toBe(true);
   });
 });
 
