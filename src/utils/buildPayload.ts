@@ -15,8 +15,11 @@ export interface FormState {
   specialRequirementsAdvised: SpecialRequirementsChoice | null;
   specialRequirementsDetail: string;
   emailOptIn: boolean;
-  /** "Email me about my certificate": optional, unticked by default (migration 065). */
-  certificateOptIn: boolean;
+  /**
+   * "I'm happy to hear from my trainer about future classes and to be asked
+   * for a review": optional, unticked by default (platform migration 067).
+   */
+  trainerContactOptIn: boolean;
   consentGiven: boolean;
 }
 
@@ -49,7 +52,9 @@ export function buildSubmitPayload(
     territory_postcode: territoryPostcode,
     attendee_name: form.attendeeName.trim(),
     email_opt_in: form.emailOptIn,
-    certificate_opt_in: form.certificateOptIn,
+    form_version: 2,
+    certificate_opt_in: false,
+    trainer_contact_opt_in: form.trainerContactOptIn,
     photo_consent: form.photoConsent === true,
     consent_given: true,
     declaration_data: buildDeclarationPayload(form),
@@ -80,6 +85,8 @@ export function buildSubmitPayload(
   const email = form.attendeeEmail.trim();
   if (email) {
     payload.attendee_email = email;
+    // The email line covers certificates on this form (no separate tick).
+    payload.certificate_opt_in = true;
   }
 
   return payload;
@@ -94,8 +101,10 @@ export function isValidEmail(email: string): boolean {
 }
 
 /** The email box becomes required once either email tick is on. */
-export function emailRequired(form: Pick<FormState, 'emailOptIn' | 'certificateOptIn'>): boolean {
-  return form.emailOptIn || form.certificateOptIn;
+export function emailRequired(
+  form: Pick<FormState, 'emailOptIn' | 'trainerContactOptIn'>,
+): boolean {
+  return form.emailOptIn || form.trainerContactOptIn;
 }
 
 /**
@@ -108,7 +117,7 @@ export function emailRequired(form: Pick<FormState, 'emailOptIn' | 'certificateO
  * - property disclaimer acknowledged
  * - special requirements choice made
  * - consent (GDPR) given
- * - if email_opt_in or certificate_opt_in is true, attendee_email must be non-empty
+ * - if email_opt_in or trainer_contact_opt_in is true, attendee_email must be non-empty
  * - any non-empty attendee_email must look like an email address
  */
 export function canSubmitForm(form: FormState): boolean {

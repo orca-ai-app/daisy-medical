@@ -30,7 +30,7 @@ const INITIAL_FORM: FormState = {
   specialRequirementsAdvised: null,
   specialRequirementsDetail: '',
   emailOptIn: false,
-  certificateOptIn: false,
+  trainerContactOptIn: false,
   consentGiven: false,
 };
 
@@ -112,6 +112,7 @@ function TextInput({
   placeholder,
   type = 'text',
   required,
+  describedBy,
 }: {
   id: string;
   value: string;
@@ -119,6 +120,7 @@ function TextInput({
   placeholder?: string;
   type?: string;
   required?: boolean;
+  describedBy?: string;
 }) {
   return (
     <input
@@ -128,6 +130,7 @@ function TextInput({
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       required={required}
+      aria-describedby={describedBy}
       className="w-full rounded-lg border border-[#D4E1E9] bg-white px-4 py-3 text-[#1A4359] placeholder-[#5A7A8F] focus:border-[#006FAC] focus:outline-none focus:ring-2 focus:ring-[#D4E8F5]"
     />
   );
@@ -341,7 +344,11 @@ export function DeclarationPage({
                 onChange={(v) => set('attendeeEmail', v)}
                 placeholder="your@email.com"
                 required={emailRequired(form)}
+                describedBy="attendee-email-help"
               />
+              <p id="attendee-email-help" className="mt-1.5 text-xs text-[#5A7A8F]">
+                Your trainer will use this to send your certificate and anything from the class.
+              </p>
               {form.attendeeEmail.trim().length > 0 && !isValidEmail(form.attendeeEmail) && (
                 <p role="alert" className="mt-1.5 text-sm text-[#DF542F]">
                   Please enter a valid email address, e.g. your@email.com
@@ -349,23 +356,21 @@ export function DeclarationPage({
               )}
             </div>
 
-            {/* Certificate opt-in (platform migration 065): optional, unticked by default. */}
+            {/* Trainer contact (platform migration 067): optional, unticked by default.
+                Replaces the retired "Email me about my certificate" tick: the email
+                line above now covers certificates. */}
             <div>
               <CheckboxRow
-                id="certificate-opt-in"
-                checked={form.certificateOptIn}
-                onChange={(v) => set('certificateOptIn', v)}
-                describedBy="certificate-opt-in-help"
+                id="trainer-contact-opt-in"
+                checked={form.trainerContactOptIn}
+                onChange={(v) => set('trainerContactOptIn', v)}
               >
-                Email me about my certificate
+                I&apos;m happy to hear from my trainer about future classes and to be asked for a
+                review.
               </CheckboxRow>
-              <p id="certificate-opt-in-help" className="mt-1.5 pl-8 text-xs text-[#5A7A8F]">
-                We&apos;ll use your email only to send certificate information for this class. It
-                is shared with your trainer for that purpose and never used for marketing.
-              </p>
-              {form.certificateOptIn && form.attendeeEmail.trim().length === 0 && (
+              {form.trainerContactOptIn && form.attendeeEmail.trim().length === 0 && (
                 <p className="mt-1.5 pl-8 text-sm text-[#DF542F]">
-                  Please add your email above so we can send it.
+                  Please add your email above so your trainer can contact you.
                 </p>
               )}
             </div>
@@ -507,9 +512,9 @@ export function DeclarationPage({
             request deletion at any time by contacting your instructor.
           </p>
           <p className="mb-4 text-sm text-[#2D5570]">
-            If you tick &ldquo;Email me about my certificate&rdquo;, your email address (never your
-            health answers) is shared with your trainer only so they can send you certificate
-            information for this class.
+            If you give your email address, it (never your health answers) is shared with your
+            trainer so they can send your certificate and anything from the class. Your trainer will
+            only email you about future classes or ask you for a review if you tick that box.
           </p>
           <CheckboxRow
             id="consent-given"

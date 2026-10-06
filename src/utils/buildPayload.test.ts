@@ -20,7 +20,7 @@ const baseForm: FormState = {
   specialRequirementsAdvised: 'not_applicable',
   specialRequirementsDetail: '',
   emailOptIn: false,
-  certificateOptIn: false,
+  trainerContactOptIn: false,
   consentGiven: true,
 };
 
@@ -276,49 +276,64 @@ describe('canSubmitForm', () => {
   });
 });
 
-// ─── certificate opt-in (platform migration 065) ────────────────────────────
+// ─── attendee emails for trainers (platform migration 067, B7) ───────────────
 
-describe('certificate opt-in', () => {
-  it('is unticked by default and sends false', () => {
-    expect(buildSubmitPayload(baseForm, 'JEN1', 'SW1').certificate_opt_in).toBe(false);
+describe('form version 2 contact fields', () => {
+  it('always marks the submission as the new form', () => {
+    expect(buildSubmitPayload(baseForm, 'JEN1', 'SW1').form_version).toBe(2);
   });
 
-  it('sends true with the email when ticked', () => {
+  it('future-classes box is unticked by default and sends false', () => {
+    expect(buildSubmitPayload(baseForm, 'JEN1', 'SW1').trainer_contact_opt_in).toBe(false);
+  });
+
+  it('sends true with the email when the future-classes box is ticked', () => {
     const result = buildSubmitPayload(
-      { ...baseForm, certificateOptIn: true, attendeeEmail: ' jane@example.com ' },
+      { ...baseForm, trainerContactOptIn: true, attendeeEmail: ' jane@example.com ' },
       'JEN1',
       'SW1',
     );
-    expect(result.certificate_opt_in).toBe(true);
+    expect(result.trainer_contact_opt_in).toBe(true);
     expect(result.attendee_email).toBe('jane@example.com');
   });
 
-  it('does not tick the marketing opt-in', () => {
+  it('the email line covers certificates: certificate_opt_in follows the email', () => {
+    expect(buildSubmitPayload(baseForm, 'JEN1', 'SW1').certificate_opt_in).toBe(false);
+    const withEmail = buildSubmitPayload(
+      { ...baseForm, attendeeEmail: 'jane@example.com' },
+      'JEN1',
+      'SW1',
+    );
+    expect(withEmail.certificate_opt_in).toBe(true);
+  });
+
+  it('the future-classes box does not tick the Daisy useful-content opt-in', () => {
     const result = buildSubmitPayload(
-      { ...baseForm, certificateOptIn: true, attendeeEmail: 'jane@example.com' },
+      { ...baseForm, trainerContactOptIn: true, attendeeEmail: 'jane@example.com' },
       'JEN1',
       'SW1',
     );
     expect(result.email_opt_in).toBe(false);
   });
 
-  it('makes the email required once ticked', () => {
+  it('makes the email required once either box is ticked', () => {
     expect(emailRequired(baseForm)).toBe(false);
-    expect(emailRequired({ ...baseForm, certificateOptIn: true })).toBe(true);
+    expect(emailRequired({ ...baseForm, trainerContactOptIn: true })).toBe(true);
     expect(emailRequired({ ...baseForm, emailOptIn: true })).toBe(true);
-    expect(canSubmitForm({ ...baseForm, certificateOptIn: true, attendeeEmail: '' })).toBe(false);
-    expect(canSubmitForm({ ...baseForm, certificateOptIn: true, attendeeEmail: '   ' })).toBe(false);
-  });
-
-  it('rejects a malformed email when ticked', () => {
     expect(
-      canSubmitForm({ ...baseForm, certificateOptIn: true, attendeeEmail: 'sarah.gmail.com' }),
+      canSubmitForm({ ...baseForm, trainerContactOptIn: true, attendeeEmail: '' }),
+    ).toBe(false);
+    expect(
+      canSubmitForm({ ...baseForm, trainerContactOptIn: true, attendeeEmail: '   ' }),
     ).toBe(false);
   });
 
-  it('allows submit when ticked with a valid email', () => {
+  it('rejects a malformed email when ticked, allows a valid one', () => {
     expect(
-      canSubmitForm({ ...baseForm, certificateOptIn: true, attendeeEmail: 'sarah@gmail.com' }),
+      canSubmitForm({ ...baseForm, trainerContactOptIn: true, attendeeEmail: 'sarah.gmail.com' }),
+    ).toBe(false);
+    expect(
+      canSubmitForm({ ...baseForm, trainerContactOptIn: true, attendeeEmail: 'sarah@gmail.com' }),
     ).toBe(true);
   });
 });
