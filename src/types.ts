@@ -42,11 +42,24 @@ export interface SubmitPayload {
   attendee_email?: string;
   email_opt_in: boolean;
   /**
-   * "Email me about my certificate" (platform migration 065). Needs
-   * attendee_email; the address is shared with the trainer for certificate
-   * information about this class only, never marketing.
+   * Form wording version (platform migration 067). 2 = the email is shared
+   * with the trainer "to send your certificate and anything from the class".
+   * The server only treats a submission as the new form when this says 2.
+   */
+  form_version: 2;
+  /**
+   * True whenever an email is given. The separate "Email me about my
+   * certificate" tick (migration 065) is retired: the email line now covers
+   * certificates. A v2-aware server derives this itself; sending it keeps an
+   * older server storing the certificate email too.
    */
   certificate_opt_in: boolean;
+  /**
+   * "I'm happy to hear from my trainer about future classes and to be asked
+   * for a review" (migration 067). Optional, unticked by default; needs
+   * attendee_email.
+   */
+  trainer_contact_opt_in: boolean;
   photo_consent: boolean;
   consent_given: true;
   declaration_data: DeclarationData;
